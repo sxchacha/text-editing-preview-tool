@@ -150,6 +150,7 @@ function loadGoogleFont(name: string) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
+  link.crossOrigin = "anonymous";
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;0,900;1,400&display=swap`;
   document.head.appendChild(link);
 }
