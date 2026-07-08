@@ -144,15 +144,34 @@ const ICON_MAP: Record<string, IconComp> = {
 };
 
 // ── Helper: load Google Font ──────────────────────────────────────────────────
-function loadGoogleFont(name: string) {
+async function loadGoogleFont(name: string) {
   const id = `gf-${name.replace(/\s+/g, "-")}`;
   if (document.getElementById(id)) return;
-  const link = document.createElement("link");
-  link.id = id;
-  link.rel = "stylesheet";
-  link.crossOrigin = "anonymous";
-  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;0,900;1,400&display=swap`;
-  document.head.appendChild(link);
+
+  try {
+    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;0,900;1,400&display=swap`;
+    
+    // 1. Load stylesheet normally for preview in browser
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.crossOrigin = "anonymous";
+    link.href = url;
+    document.head.appendChild(link);
+
+    // 2. Also fetch the CSS text and inject it into a local <style> tag.
+    // This ensures dom-to-image-more has direct local access to the @font-face rules!
+    const res = await fetch(url);
+    if (res.ok) {
+      const cssText = await res.text();
+      const style = document.createElement("style");
+      style.id = `${id}-local-style`;
+      style.textContent = cssText;
+      document.head.appendChild(style);
+    }
+  } catch (err) {
+    console.error("Failed to fetch and inline font stylesheet", err);
+  }
 }
 
 // ── Helper: restore saved range ───────────────────────────────────────────────
