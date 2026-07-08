@@ -2,6 +2,10 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react
 import lottie from "lottie-web";
 import type { AnimationItem } from "lottie-web";
 import "pretty-color-picker";
+// @ts-ignore
+import domtoimage from "dom-to-image-more";
+// @ts-ignore
+import gifshot from "gifshot";
 import { FLUENT_EMOJI_CATS, fluentUrl } from "./data/fluentEmoji";
 import {
   Heart, Star, Flame, Zap, Crown, Gift, Trophy, Bell, Bookmark, Coffee,
@@ -164,12 +168,12 @@ function getSucceedingElement(container: Node, offset: number, editor: HTMLEleme
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [fontFamily, setFontFamily] = useState("Anton");
-  const [fontSize, setFontSize] = useState(80);
-  const [textColor, setTextColor] = useState("#111111");
-  const [bgColor, setBgColor] = useState("#fafaf8");
-  const [lineHeight, setLineHeight] = useState(1.25);
-  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
+  const [fontFamily, setFontFamily] = useState(() => localStorage.getItem("moonvy_font_family") || "Anton");
+  const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem("moonvy_font_size")) || 80);
+  const [textColor, setTextColor] = useState(() => localStorage.getItem("moonvy_text_color") || "#111111");
+  const [bgColor, setBgColor] = useState(() => localStorage.getItem("moonvy_bg_color") || "#fafaf8");
+  const [lineHeight, setLineHeight] = useState(() => Number(localStorage.getItem("moonvy_line_height")) || 1.25);
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">(() => (localStorage.getItem("moonvy_text_align") as any) || "left");
 
   const [showFontMenu, setShowFontMenu] = useState(false);
   const [fontSource, setFontSource] = useState<"google" | "local">("google");
@@ -181,7 +185,7 @@ export default function App() {
   const [manualFontInput, setManualFontInput] = useState("");
 
   const [showEmojiPanel, setShowEmojiPanel] = useState(false);
-  const [emojiSource, setEmojiSource] = useState<"system" | "fluent">("system");
+  const [emojiSource, setEmojiSource] = useState<"system" | "fluent">("fluent");
   const [emojiCat, setEmojiCat] = useState("😀 Smiles");
   const [fluentCat, setFluentCat] = useState("😀 笑脸");
 
@@ -189,6 +193,9 @@ export default function App() {
   const [iconSearch, setIconSearch] = useState("");
 
   const [pendingIcon, setPendingIcon] = useState<string | null>(null);
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
@@ -200,6 +207,41 @@ export default function App() {
   // Lottie: keyed by unique id → animation data / instance
   const lottieDataRef = useRef<Map<string, object>>(new Map());
   const lottieInstancesRef = useRef<Map<string, AnimationItem>>(new Map());
+
+  // Save settings automatically on any setting change
+  useEffect(() => {
+    localStorage.setItem("moonvy_font_family", fontFamily);
+    localStorage.setItem("moonvy_font_size", String(fontSize));
+    localStorage.setItem("moonvy_line_height", String(lineHeight));
+    localStorage.setItem("moonvy_text_align", textAlign);
+    localStorage.setItem("moonvy_text_color", textColor);
+    localStorage.setItem("moonvy_bg_color", bgColor);
+  }, [fontFamily, fontSize, lineHeight, textAlign, textColor, bgColor]);
+
+  // Save editor content and Lottie references helper
+  const saveContent = useCallback(() => {
+    if (editorRef.current) {
+      localStorage.setItem("moonvy_editor_content", editorRef.current.innerHTML);
+    }
+    localStorage.setItem("moonvy_lottie_data", JSON.stringify(Array.from(lottieDataRef.current.entries())));
+  }, []);
+
+  // Restore content and settings on mount
+  useLayoutEffect(() => {
+    const savedLottie = localStorage.getItem("moonvy_lottie_data");
+    if (savedLottie) {
+      try {
+        lottieDataRef.current = new Map(JSON.parse(savedLottie));
+      } catch (e) {
+        console.error("Failed to load Lottie data", e);
+      }
+    }
+
+    const savedContent = localStorage.getItem("moonvy_editor_content");
+    if (savedContent && editorRef.current) {
+      editorRef.current.innerHTML = savedContent;
+    }
+  }, []);
 
   // Preload key fonts on mount
   useEffect(() => {
@@ -248,23 +290,29 @@ export default function App() {
     };
 
     const observer = new MutationObserver((mutations) => {
+      let changed = false;
       for (const m of mutations) {
         m.addedNodes.forEach((n) => {
           if (!(n instanceof Element)) return;
           if (n.hasAttribute("data-lottie-id")) initEl(n);
           n.querySelectorAll("[data-lottie-id]").forEach(initEl);
+          changed = true;
         });
         m.removedNodes.forEach((n) => {
           if (!(n instanceof Element)) return;
           if (n.hasAttribute("data-lottie-id")) cleanupEl(n);
           n.querySelectorAll("[data-lottie-id]").forEach(cleanupEl);
+          changed = true;
         });
+      }
+      if (changed) {
+        saveContent();
       }
     });
 
     observer.observe(editor, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, []);
+  }, [saveContent]);
 
   // Track cursor/selection inside editor
   useEffect(() => {
@@ -339,8 +387,9 @@ export default function App() {
 
       // Clean up the anchor element itself
       anchor.parentNode?.removeChild(anchor);
+      saveContent();
     });
-  }, []);
+  }, [saveContent]);
 
   // Change font (global or selection)
   const changeFont = useCallback((name: string) => {
@@ -432,9 +481,9 @@ export default function App() {
   const insertFluentEmoji = useCallback((category: string, name: string, char: string) => {
     // Keep panel open, only close when clicking the 'X' button
     const src = fluentUrl(category, name);
-    const imgStyle = "height:1em;width:auto;vertical-align:middle;display:inline-block;";
+    const imgStyle = "height:1em;width:auto;vertical-align:-0.15em;display:inline-block;";
     insertHTML(
-      `<img src="${src}" alt="${char}" title="${name}" style="${imgStyle}" contenteditable="false" draggable="false" loading="lazy" />`
+      `<img src="${src}" alt="${char}" title="${name}" style="${imgStyle}" contenteditable="false" draggable="false" loading="lazy" crossorigin="anonymous" />`
     );
   }, [insertHTML]);
 
@@ -444,7 +493,8 @@ export default function App() {
     editorRef.current?.focus();
     restoreSavedRange(savedRangeRef.current);
     document.execCommand("insertText", false, char);
-  }, []);
+    setTimeout(saveContent, 50);
+  }, [saveContent]);
 
   // Handle animated & static media upload
   // Supported: GIF, APNG, WebP (animated), PNG, JPG → <img>
@@ -455,7 +505,7 @@ export default function App() {
     if (!file) return;
     e.target.value = "";
 
-    const imgStyle = "height:1em;width:auto;vertical-align:middle;display:inline-block;border-radius:3px;max-width:400px;";
+    const imgStyle = "height:1em;width:auto;vertical-align:-0.15em;display:inline-block;border-radius:3px;max-width:400px;";
 
     // ── Lottie JSON ──────────────────────────────────────────────────────────
     const isJSON = file.type === "application/json" || file.name.toLowerCase().endsWith(".json");
@@ -473,7 +523,7 @@ export default function App() {
           // Insert a placeholder span; MutationObserver will hydrate it with lottie-web
           insertHTML(
             `<span contenteditable="false" data-lottie-id="${id}" ` +
-            `style="height:2em;width:2em;display:inline-block;vertical-align:middle;overflow:hidden;flex-shrink:0;" ` +
+            `style="height:2em;width:2em;display:inline-block;vertical-align:-0.5em;overflow:hidden;flex-shrink:0;" ` +
             `title="Lottie animation"></span>`
           );
         } catch {
@@ -494,7 +544,7 @@ export default function App() {
         const svgEl = doc.querySelector("svg");
         if (!svgEl) return;
         // Preserve SMIL / CSS animations by keeping the SVG inline
-        svgEl.setAttribute("style", "height:1em;width:auto;vertical-align:middle;display:inline-block;");
+        svgEl.setAttribute("style", "height:1em;width:auto;vertical-align:-0.15em;display:inline-block;");
         svgEl.setAttribute("contenteditable", "false");
         svgEl.removeAttribute("width");
         svgEl.removeAttribute("height");
@@ -526,12 +576,180 @@ export default function App() {
     if (!svg) return;
 
     const cloned = svg.cloneNode(true) as SVGElement;
-    cloned.setAttribute("style", "height:1em;width:1em;vertical-align:middle;display:inline-block;flex-shrink:0;");
+    cloned.setAttribute("style", "height:1em;width:1em;vertical-align:-0.15em;display:inline-block;flex-shrink:0;");
     cloned.setAttribute("contenteditable", "false");
 
     insertHTML(cloned.outerHTML);
     setPendingIcon(null);
   }, [pendingIcon, insertHTML]);
+
+  // Export as PNG image (Retina/high-res scaled by 2)
+  const exportAsPNG = useCallback(async () => {
+    if (!editorRef.current) return;
+    try {
+      const width = editorRef.current.offsetWidth;
+      const height = editorRef.current.offsetHeight;
+      const scale = 2; // retina 2x resolution
+
+      const dataUrl = await domtoimage.toPng(editorRef.current, {
+        width: width * scale,
+        height: height * scale,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          width: `${width}px`,
+          height: `${height}px`
+        },
+        bgcolor: bgColor
+      });
+
+      const link = document.createElement("a");
+      link.download = `moonvy-text-${Date.now()}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Export PNG failed", err);
+      alert("导出图片失败，或外部图片跨域加载受限。请检查控制台错误信息。");
+    }
+  }, [bgColor]);
+
+  // Export as animated GIF using domtoimage frames in loop & gifshot
+  const exportAsGIF = useCallback(async () => {
+    if (!editorRef.current) return;
+    setIsExporting(true);
+    setExportProgress(0);
+
+    const numFrames = 15;
+    const frameDelay = 150;
+    const frames: string[] = [];
+    const width = editorRef.current.offsetWidth;
+    const height = editorRef.current.offsetHeight;
+
+    try {
+      for (let i = 0; i < numFrames; i++) {
+        const dataUrl = await domtoimage.toPng(editorRef.current, {
+          width: width,
+          height: height,
+          bgcolor: bgColor
+        });
+        frames.push(dataUrl);
+        setExportProgress(Math.round(((i + 1) / numFrames) * 50));
+        await new Promise((resolve) => setTimeout(resolve, frameDelay));
+      }
+
+      setExportProgress(60);
+      // @ts-ignore
+      gifshot.createGIF({
+        images: frames,
+        interval: frameDelay / 1000,
+        gifWidth: width,
+        gifHeight: height,
+        numFrames: numFrames,
+        sampleInterval: 10,
+        numWorkers: 2,
+      }, function (obj: any) {
+        if (!obj.error) {
+          setExportProgress(100);
+          const link = document.createElement("a");
+          link.download = `moonvy-text-${Date.now()}.gif`;
+          link.href = obj.image;
+          link.click();
+          setTimeout(() => {
+            setIsExporting(false);
+            setExportProgress(null);
+          }, 1000);
+        } else {
+          console.error("gifshot error", obj.error);
+          alert("生成 GIF 失败：" + obj.error);
+          setIsExporting(false);
+          setExportProgress(null);
+        }
+      });
+    } catch (err) {
+      console.error("Export GIF failed", err);
+      alert("导出 GIF 失败，或外部图片跨域加载受限。请检查控制台。");
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }, [bgColor]);
+
+  // Export as WebM dynamic video
+  const exportAsWebM = useCallback(async () => {
+    if (!editorRef.current) return;
+    setIsExporting(true);
+    setExportProgress(0);
+
+    const numFrames = 30; // 3 seconds at 10fps
+    const frameDelay = 100;
+    const width = editorRef.current.offsetWidth;
+    const height = editorRef.current.offsetHeight;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const stream = canvas.captureStream(10);
+    let options = { mimeType: "video/webm;codecs=vp9" };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: "video/webm" };
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: "" };
+    }
+
+    const recordedChunks: BlobPart[] = [];
+    const mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `moonvy-text-${Date.now()}.webm`;
+      link.href = url;
+      link.click();
+      setIsExporting(false);
+      setExportProgress(null);
+    };
+
+    mediaRecorder.start();
+
+    try {
+      for (let i = 0; i < numFrames; i++) {
+        const dataUrl = await domtoimage.toPng(editorRef.current, {
+          width: width,
+          height: height,
+          bgcolor: bgColor
+        });
+        
+        await new Promise<void>((resolveImg) => {
+          const img = new Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolveImg();
+          };
+          img.src = dataUrl;
+        });
+
+        setExportProgress(Math.round(((i + 1) / numFrames) * 100));
+        await new Promise((resolve) => setTimeout(resolve, frameDelay));
+      }
+      mediaRecorder.stop();
+    } catch (err) {
+      console.error("Recording failed", err);
+      alert("录制视频失败，或外部图片跨域加载受限。请检查控制台。");
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }, [bgColor]);
 
   // Keyboard shortcuts handler for the editor
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1103,7 +1321,7 @@ export default function App() {
                 ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
                 : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
             }`}
-            onClick={() => { setShowEmojiPanel((v) => !v); setShowIconPanel(false); }}
+            onClick={() => setShowEmojiPanel((v) => !v)}
           >
             <span className="text-base leading-none">😀</span>
             <span>Emoji</span>
@@ -1116,195 +1334,236 @@ export default function App() {
                 ? "bg-violet-500/15 text-violet-300 border-violet-500/30"
                 : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
             }`}
-            onClick={() => { setShowIconPanel((v) => !v); setShowEmojiPanel(false); }}
+            onClick={() => setShowIconPanel((v) => !v)}
           >
             <Sparkles size={14} />
             <span>Icons</span>
           </button>
         </div>
+
+        <div className="w-px h-5 bg-white/[0.08] flex-shrink-0" />
+
+        {/* ── Export actions ── */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-indigo-600/10 cursor-pointer"
+            onClick={exportAsPNG}
+            disabled={isExporting}
+            title="导出为静态高清 PNG 图片 (2x Retina 像素)"
+          >
+            <Camera size={13} />
+            <span>{isExporting ? "生成中..." : "导出图片"}</span>
+          </button>
+          <button
+            className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-violet-600/10 cursor-pointer"
+            onClick={exportAsGIF}
+            title="录制并导出为动态 GIF 图 (真动图，防卡顿)"
+            disabled={isExporting}
+          >
+            <Video size={13} />
+            <span>{isExporting ? `动图 ${exportProgress}%` : "导出动图"}</span>
+          </button>
+          <button
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-emerald-600/10 cursor-pointer"
+            onClick={exportAsWebM}
+            title="录制高清 WebM 动态视频 (支持透明度，极高画质)"
+            disabled={isExporting}
+          >
+            <Zap size={13} />
+            <span>{isExporting ? `视频 ${exportProgress}%` : "导出视频"}</span>
+          </button>
+        </div>
       </header>
 
-      {/* ── Canvas ──────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto" style={{ backgroundColor: bgColor }}>
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          className="textmix-canvas min-h-full p-12 md:p-16"
-          onKeyDown={handleKeyDown}
-          data-placeholder="Start typing here… mix in 🎨 emoji, 🖼️ images, and ✦ icons anywhere"
-          style={{
-            fontFamily: `'${fontFamily}', sans-serif`,
-            fontSize: `${fontSize}px`,
-            color: textColor,
-            lineHeight: lineHeight,
-            textAlign: textAlign,
-            wordBreak: "break-word",
-            minHeight: "100%",
-          }}
-        />
-      </div>
+      {/* ── Main Layout (Canvas + Sidebar) ─────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left: Editor & Shortcuts */}
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="flex-1 overflow-auto" style={{ backgroundColor: bgColor }}>
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              className="textmix-canvas min-h-full p-12 md:p-16"
+              onKeyDown={handleKeyDown}
+              onInput={saveContent}
+              data-placeholder="Start typing here… mix in 🎨 emoji, 🖼️ images, and ✦ icons anywhere"
+              style={{
+                fontFamily: `'${fontFamily}', sans-serif`,
+                fontSize: `${fontSize}px`,
+                color: textColor,
+                lineHeight: lineHeight,
+                textAlign: textAlign,
+                wordBreak: "break-word",
+                minHeight: "100%",
+              }}
+            />
+          </div>
 
-      {/* ── Shortcuts hint bar ──────────────────────────────────────────────── */}
-      {!showEmojiPanel && !showIconPanel && (
-        <div className="flex items-center justify-center gap-4 px-4 py-1.5 bg-[#0a0a0d] border-t border-white/[0.05] flex-shrink-0 flex-wrap">
-          {[
-            ["⌘Z", "撤销"], ["⌘⇧Z", "重做"], ["⌘B", "加粗"],
-            ["⌘I", "斜体"], ["⌘C", "复制"], ["⌘V", "粘贴"],
-            ["⌘X", "剪切"], ["⌘A", "全选"],
-          ].map(([key, label]) => (
-            <span key={key} className="flex items-center gap-1">
-              <kbd className="text-[10px] bg-white/[0.07] text-white/40 px-1.5 py-0.5 rounded font-mono border border-white/[0.08]">{key}</kbd>
-              <span className="text-white/25 text-[10px]">{label}</span>
-            </span>
-          ))}
+          {/* Shortcuts hint bar */}
+          <div className="flex items-center justify-center gap-4 px-4 py-2 bg-[#0a0a0d] border-t border-white/[0.05] flex-shrink-0 flex-wrap z-10">
+            {[
+              ["⌘Z", "撤销"], ["⌘⇧Z", "重做"], ["⌘B", "加粗"],
+              ["⌘I", "斜体"], ["⌘C", "复制"], ["⌘V", "粘贴"],
+              ["⌘X", "剪切"], ["⌘A", "全选"],
+            ].map(([key, label]) => (
+              <span key={key} className="flex items-center gap-1">
+                <kbd className="text-[10px] bg-white/[0.07] text-white/40 px-1.5 py-0.5 rounded font-mono border border-white/[0.08]">{key}</kbd>
+                <span className="text-white/25 text-[10px]">{label}</span>
+              </span>
+            ))}
+          </div>
         </div>
-      )}
 
-      {/* ── Emoji Panel ─────────────────────────────────────────────────────── */}
-      {showEmojiPanel && (
-        <div className="border-t border-white/[0.07] bg-[#111114] flex-shrink-0 flex flex-col" style={{ maxHeight: 300 }}>
+        {/* Right: Sidebar */}
+        {(showEmojiPanel || showIconPanel) && (
+          <div className="w-[320px] border-l border-white/[0.07] bg-[#111114] flex flex-col flex-shrink-0 divide-y divide-white/[0.06] overflow-y-auto">
+            {/* ── Emoji Panel ─────────────────────────────────────────────────── */}
+            {showEmojiPanel && (
+              <div className="flex flex-col flex-shrink-0 min-h-[350px] max-h-[450px]">
+                {/* Header: source toggle + close */}
+                <div className="flex flex-col flex-shrink-0 border-b border-white/[0.06] gap-2">
+                  {/* Line 1: Source tabs + Close button */}
+                  <div className="flex items-center justify-between px-3 pt-2.5">
+                    <div className="flex rounded-lg overflow-hidden border border-white/[0.08] flex-shrink-0">
+                      {(["fluent", "system"] as const).map((src) => (
+                        <button
+                          key={src}
+                          className={`px-3 py-1 text-[11px] font-medium transition-colors ${
+                            emojiSource === src
+                              ? "bg-white/[0.12] text-white"
+                              : "text-white/35 hover:text-white/60"
+                          }`}
+                          onClick={() => setEmojiSource(src)}
+                        >
+                          {src === "system" ? "系统 Emoji" : "✦ Fluent"}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => setShowEmojiPanel(false)} className="text-white/25 hover:text-white/60 flex-shrink-0 transition-colors cursor-pointer p-1">
+                      <X size={15} />
+                    </button>
+                  </div>
 
-          {/* Header: source toggle + close */}
-          <div className="flex items-center gap-2 px-3 pt-2.5 pb-2 flex-shrink-0 border-b border-white/[0.06]">
-            {/* Source tabs */}
-            <div className="flex rounded-lg overflow-hidden border border-white/[0.08] flex-shrink-0">
-              {(["system", "fluent"] as const).map((src) => (
-                <button
-                  key={src}
-                  className={`px-3 py-1 text-[11px] font-medium transition-colors ${
-                    emojiSource === src
-                      ? "bg-white/[0.12] text-white"
-                      : "text-white/35 hover:text-white/60"
-                  }`}
-                  onClick={() => setEmojiSource(src)}
-                >
-                  {src === "system" ? "系统 Emoji" : "✦ Fluent"}
-                </button>
-              ))}
-            </div>
+                  {/* Line 2: Category tabs (scrollable) - occupies its own line */}
+                  <div className="flex gap-1 px-3 pb-2.5 overflow-x-auto min-w-0 scrollbar-none">
+                    {Object.keys(emojiSource === "system" ? EMOJI_CATS : FLUENT_EMOJI_CATS).map((cat) => {
+                      const active = emojiSource === "system" ? cat === emojiCat : cat === fluentCat;
+                      return (
+                        <button
+                          key={cat}
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] whitespace-nowrap flex-shrink-0 transition-colors ${
+                            active
+                              ? emojiSource === "system"
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-indigo-500/20 text-indigo-300"
+                              : "bg-white/[0.06] text-white/35 hover:text-white/60"
+                          }`}
+                          onClick={() => emojiSource === "system" ? setEmojiCat(cat) : setFluentCat(cat)}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {/* Category tabs (scrollable) */}
-            <div className="flex gap-1 overflow-x-auto flex-1 min-w-0">
-              {Object.keys(emojiSource === "system" ? EMOJI_CATS : FLUENT_EMOJI_CATS).map((cat) => {
-                const active = emojiSource === "system" ? cat === emojiCat : cat === fluentCat;
-                return (
-                  <button
-                    key={cat}
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] whitespace-nowrap flex-shrink-0 transition-colors ${
-                      active
-                        ? emojiSource === "system"
-                          ? "bg-amber-500/20 text-amber-300"
-                          : "bg-indigo-500/20 text-indigo-300"
-                        : "bg-white/[0.06] text-white/35 hover:text-white/60"
-                    }`}
-                    onClick={() => emojiSource === "system" ? setEmojiCat(cat) : setFluentCat(cat)}
-                  >
-                    {cat}
+                {/* System emoji grid */}
+                {emojiSource === "system" && (
+                  <div className="px-3 py-2.5 grid gap-0.5 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(40px, 1fr))" }}>
+                    {EMOJI_CATS[emojiCat].map((emoji) => (
+                      <button
+                        key={emoji}
+                        className="emoji-btn text-2xl p-1.5 rounded-lg transition-colors text-center leading-none cursor-pointer"
+                        onClick={() => insertEmoji(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fluent emoji image grid (animated PNG) */}
+                {emojiSource === "fluent" && (
+                  <div className="px-3 py-2.5 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))" }}>
+                    {(FLUENT_EMOJI_CATS[fluentCat] ?? []).map(([char, category, name]) => (
+                      <button
+                        key={`${category}/${name}`}
+                        className="emoji-btn flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition-colors group cursor-pointer"
+                        onClick={() => insertFluentEmoji(category, name, char)}
+                        title={name}
+                      >
+                        <img
+                          src={fluentUrl(category, name)}
+                          alt={char}
+                          loading="lazy"
+                          className="w-8 h-8 object-contain group-hover:scale-110 transition-transform"
+                          onError={(e) => {
+                            const parent = (e.target as HTMLImageElement).parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<span class="text-2xl leading-none">${char}</span>`;
+                              parent.onclick = () => insertEmoji(char);
+                            }
+                          }}
+                        />
+                        <span className="text-white/20 text-[8px] truncate w-full text-center leading-tight group-hover:text-white/40 transition-colors">{char}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Icon Panel ──────────────────────────────────────────────────── */}
+            {showIconPanel && (
+              <div className="flex flex-col flex-shrink-0 min-h-[300px] max-h-[400px]">
+                <div className="flex items-center gap-3 px-4 pt-3 pb-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.07] rounded-lg px-3 flex-1">
+                    <Search size={12} className="text-white/25 flex-shrink-0" />
+                    <input
+                      autoFocus
+                      className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
+                      placeholder="Search icons…"
+                      value={iconSearch}
+                      onChange={(e) => setIconSearch(e.target.value)}
+                    />
+                    {iconSearch && (
+                      <button onClick={() => setIconSearch("")} className="text-white/20 hover:text-white/50 transition-colors">
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={() => setShowIconPanel(false)} className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 cursor-pointer">
+                    <X size={15} />
                   </button>
-                );
-              })}
-            </div>
+                </div>
 
-            <button onClick={() => setShowEmojiPanel(false)} className="text-white/25 hover:text-white/60 flex-shrink-0 transition-colors ml-1">
-              <X size={15} />
-            </button>
-          </div>
-
-          {/* ── System emoji grid ── */}
-          {emojiSource === "system" && (
-            <div className="px-3 py-2.5 grid gap-0.5 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(40px, 1fr))" }}>
-              {EMOJI_CATS[emojiCat].map((emoji) => (
-                <button
-                  key={emoji}
-                  className="emoji-btn text-2xl p-1.5 rounded-lg transition-colors text-center leading-none"
-                  onClick={() => insertEmoji(emoji)}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* ── Fluent emoji image grid (animated PNG) ── */}
-          {emojiSource === "fluent" && (
-            <div className="px-3 py-2.5 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))" }}>
-              {(FLUENT_EMOJI_CATS[fluentCat] ?? []).map(([char, category, name]) => (
-                <button
-                  key={`${category}/${name}`}
-                  className="emoji-btn flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition-colors group"
-                  onClick={() => insertFluentEmoji(category, name, char)}
-                  title={name}
-                >
-                  <img
-                    src={fluentUrl(category, name)}
-                    alt={char}
-                    loading="lazy"
-                    className="w-8 h-8 object-contain group-hover:scale-110 transition-transform"
-                    onError={(e) => {
-                      const parent = (e.target as HTMLImageElement).parentElement;
-                      if (parent) {
-                        parent.innerHTML = `<span class="text-2xl leading-none">${char}</span>`;
-                        parent.onclick = () => insertEmoji(char);
-                      }
-                    }}
-                  />
-                  <span className="text-white/20 text-[8px] truncate w-full text-center leading-tight group-hover:text-white/40 transition-colors">{char}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* ── Icon Panel ──────────────────────────────────────────────────────── */}
-      {showIconPanel && (
-        <div className="border-t border-white/[0.07] bg-[#111114] flex-shrink-0" style={{ maxHeight: 270 }}>
-          <div className="flex items-center gap-3 px-4 pt-3 pb-2">
-            <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.07] rounded-lg px-3 flex-1">
-              <Search size={12} className="text-white/25 flex-shrink-0" />
-              <input
-                autoFocus
-                className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
-                placeholder="Search icons…"
-                value={iconSearch}
-                onChange={(e) => setIconSearch(e.target.value)}
-              />
-              {iconSearch && (
-                <button onClick={() => setIconSearch("")} className="text-white/20 hover:text-white/50 transition-colors">
-                  <X size={11} />
-                </button>
-              )}
-            </div>
-            <button onClick={() => setShowIconPanel(false)} className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0">
-              <X size={15} />
-            </button>
-          </div>
-
-          <div className="px-4 pb-4 grid gap-1 overflow-y-auto" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", maxHeight: 175 }}>
-            {filteredIcons.map((name) => {
-              const Icon = ICON_MAP[name];
-              return (
-                <button
-                  key={name}
-                  className="icon-btn flex flex-col items-center gap-1 p-2.5 rounded-xl transition-colors group"
-                  onClick={() => insertIcon(name)}
-                  title={name}
-                >
-                  <Icon size={22} className="text-white/60 group-hover:text-white transition-colors" />
-                  <span className="text-white/25 group-hover:text-white/50 text-[9px] truncate w-full text-center leading-tight transition-colors">
-                    {name}
-                  </span>
-                </button>
-              );
-            })}
-            {filteredIcons.length === 0 && (
-              <p className="text-white/25 text-sm col-span-full text-center py-6">No icons found</p>
+                <div className="px-4 pb-4 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))" }}>
+                  {filteredIcons.map((name) => {
+                    const Icon = ICON_MAP[name];
+                    return (
+                      <button
+                        key={name}
+                        className="icon-btn flex flex-col items-center gap-1 p-2.5 rounded-xl transition-colors group cursor-pointer"
+                        onClick={() => insertIcon(name)}
+                        title={name}
+                      >
+                        <Icon size={22} className="text-white/60 group-hover:text-white transition-colors" />
+                        <span className="text-white/25 group-hover:text-white/50 text-[9px] truncate w-full text-center leading-tight transition-colors">
+                          {name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {filteredIcons.length === 0 && (
+                    <p className="text-white/25 text-sm col-span-full text-center py-6">No icons found</p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
