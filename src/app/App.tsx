@@ -110,6 +110,58 @@ function restoreSavedRange(savedRange: Range | null): boolean {
   return true;
 }
 
+// ── Helper: find preceding element in text flow ──────────────────────────────
+function getPrecedingElement(container: Node, offset: number, editor: HTMLElement | null): Element | null {
+  if (container.nodeType === Node.ELEMENT_NODE) {
+    if (offset > 0 && offset <= container.childNodes.length) {
+      const node = container.childNodes[offset - 1];
+      if (node instanceof Element) return node;
+    }
+  } else if (container.nodeType === Node.TEXT_NODE) {
+    const text = container.textContent || "";
+    if (offset === 0 || (offset === 1 && text.startsWith("\u200B"))) {
+      let curr: Node | null = container;
+      while (curr && curr !== editor) {
+        if (curr.previousSibling) {
+          const prev = curr.previousSibling;
+          if (prev instanceof Element) return prev;
+          if (prev.nodeType === Node.TEXT_NODE) {
+            if ((prev.textContent || "").length > 0) return null;
+          }
+        }
+        curr = curr.parentNode;
+      }
+    }
+  }
+  return null;
+}
+
+// ── Helper: find succeeding element in text flow ─────────────────────────────
+function getSucceedingElement(container: Node, offset: number, editor: HTMLElement | null): Element | null {
+  if (container.nodeType === Node.ELEMENT_NODE) {
+    if (offset >= 0 && offset < container.childNodes.length) {
+      const node = container.childNodes[offset];
+      if (node instanceof Element) return node;
+    }
+  } else if (container.nodeType === Node.TEXT_NODE) {
+    const text = container.textContent || "";
+    if (offset === text.length || (offset === text.length - 1 && text.endsWith("\u200B"))) {
+      let curr: Node | null = container;
+      while (curr && curr !== editor) {
+        if (curr.nextSibling) {
+          const next = curr.nextSibling;
+          if (next instanceof Element) return next;
+          if (next.nodeType === Node.TEXT_NODE) {
+            if ((next.textContent || "").length > 0) return null;
+          }
+        }
+        curr = curr.parentNode;
+      }
+    }
+  }
+  return null;
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [fontFamily, setFontFamily] = useState("Anton");
@@ -256,7 +308,7 @@ export default function App() {
 
     // Append a throwaway anchor so we can locate the insertion point after the call
     const anchorId = `_ins${Date.now()}`;
-    document.execCommand("insertHTML", false, html + `<span id="${anchorId}"></span>`);
+    document.execCommand("insertHTML", false, html + "\u200B" + `<span id="${anchorId}"></span>`);
 
     // Defer cleanup until after the browser has settled the DOM
     requestAnimationFrame(() => {
@@ -378,7 +430,7 @@ export default function App() {
 
   // Insert Fluent emoji as an inline animated <img> from CDN
   const insertFluentEmoji = useCallback((category: string, name: string, char: string) => {
-    setShowEmojiPanel(false);
+    // Keep panel open, only close when clicking the 'X' button
     const src = fluentUrl(category, name);
     const imgStyle = "height:1em;width:auto;vertical-align:middle;display:inline-block;";
     insertHTML(
@@ -388,7 +440,7 @@ export default function App() {
 
   // Insert native emoji character
   const insertEmoji = useCallback((char: string) => {
-    setShowEmojiPanel(false);
+    // Keep panel open, only close when clicking the 'X' button
     editorRef.current?.focus();
     restoreSavedRange(savedRangeRef.current);
     document.execCommand("insertText", false, char);
@@ -443,6 +495,7 @@ export default function App() {
         if (!svgEl) return;
         // Preserve SMIL / CSS animations by keeping the SVG inline
         svgEl.setAttribute("style", "height:1em;width:auto;vertical-align:middle;display:inline-block;");
+        svgEl.setAttribute("contenteditable", "false");
         svgEl.removeAttribute("width");
         svgEl.removeAttribute("height");
         insertHTML(svgEl.outerHTML);
@@ -462,7 +515,7 @@ export default function App() {
 
   // Insert Lucide icon (via hidden render → useLayoutEffect)
   const insertIcon = useCallback((name: string) => {
-    setShowIconPanel(false);
+    // Keep panel open, only close when clicking the 'X' button
     setPendingIcon(name);
   }, []);
 
@@ -482,6 +535,31 @@ export default function App() {
 
   // Keyboard shortcuts handler for the editor
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Handle backspace/delete of non-editable elements (icons, emojis, images, Lottie)
+    if (e.key === "Backspace" || e.key === "Delete") {
+      const sel = window.getSelection();
+      if (sel && sel.isCollapsed) {
+        const { anchorNode, anchorOffset } = sel;
+        if (anchorNode) {
+          if (e.key === "Backspace") {
+            const prevEl = getPrecedingElement(anchorNode, anchorOffset, editorRef.current);
+            if (prevEl && (prevEl.getAttribute("contenteditable") === "false" || prevEl.hasAttribute("data-lottie-id"))) {
+              e.preventDefault();
+              prevEl.remove();
+              return;
+            }
+          } else {
+            const nextEl = getSucceedingElement(anchorNode, anchorOffset, editorRef.current);
+            if (nextEl && (nextEl.getAttribute("contenteditable") === "false" || nextEl.hasAttribute("data-lottie-id"))) {
+              e.preventDefault();
+              nextEl.remove();
+              return;
+            }
+          }
+        }
+      }
+    }
+
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
 
