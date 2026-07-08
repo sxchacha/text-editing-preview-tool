@@ -1313,10 +1313,10 @@ export default function App() {
 
         {/* Right: Sidebar */}
         {(showEmojiPanel || showIconPanel) && (
-          <div className="w-[320px] border-l border-white/[0.07] bg-[#111114] flex flex-col flex-shrink-0 divide-y divide-white/[0.06] overflow-y-auto">
+          <div className="w-[320px] border-l border-white/[0.07] bg-[#111114] flex flex-col flex-shrink-0 divide-y divide-white/[0.06] overflow-hidden">
             {/* ── Emoji Panel ─────────────────────────────────────────────────── */}
             {showEmojiPanel && (
-              <div className="flex flex-col flex-shrink-0 min-h-[350px] max-h-[450px]">
+              <div className="flex flex-col flex-1 min-h-0">
                 {/* Header: source toggle + close */}
                 <div className="flex flex-col flex-shrink-0 border-b border-white/[0.06] gap-2">
                   {/* Line 1: Source tabs + Close button */}
@@ -1412,7 +1412,7 @@ export default function App() {
 
             {/* ── Icon Panel ──────────────────────────────────────────────────── */}
             {showIconPanel && (
-              <div className="flex flex-col flex-shrink-0 min-h-[300px] max-h-[400px]">
+              <div className="flex flex-col flex-1 min-h-0">
                 <div className="flex items-center gap-3 px-4 pt-3 pb-2 flex-shrink-0">
                   <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.07] rounded-lg px-3 flex-1">
                     <Search size={12} className="text-white/25 flex-shrink-0" />
