@@ -4,8 +4,6 @@ import type { AnimationItem } from "lottie-web";
 import "pretty-color-picker";
 // @ts-ignore
 import domtoimage from "dom-to-image-more";
-// @ts-ignore
-import gifshot from "gifshot";
 import { FLUENT_EMOJI_CATS, fluentUrl } from "./data/fluentEmoji";
 import {
   Heart, Star, Flame, Zap, Crown, Gift, Trophy, Bell, Bookmark, Coffee,
@@ -16,6 +14,23 @@ import {
   Bold, Italic, ImagePlus, Search, ChevronDown, Check, RotateCcw,
   AlignLeft, AlignCenter, AlignRight, Type, X, Monitor, RefreshCw,
 } from "lucide-react";
+import {
+  RiHeartLine, RiHeartFill, RiStarLine, RiStarFill, RiFireLine, RiFireFill,
+  RiFlashlightLine, RiCompassLine, RiTrophyLine, RiTrophyFill, RiVipCrownLine,
+  RiVipCrownFill, RiGiftLine, RiGiftFill, RiBellLine, RiBellFill, RiBookmarkLine,
+  RiBookmarkFill, RiCupLine, RiRocketLine, RiRocketFill, RiGlobalLine,
+  RiHome2Line, RiHome2Fill, RiMusic2Line, RiMusic2Fill, RiCameraLine,
+  RiCameraFill, RiGamepadLine, RiGamepadFill, RiPaletteLine, RiPaletteFill,
+  RiSparkling2Line, RiSparkling2Fill, RiLightbulbLine, RiLightbulbFill, RiToolsLine,
+  RiPaintBrushLine, RiPaintBrushFill, RiSearchLine, RiSettings3Line,
+  RiUser3Line, RiUser3Fill, RiTeamLine, RiMailLine, RiMailSendLine,
+  RiChat3Line, RiDiscussLine, RiFileTextLine, RiFolderOpenLine,
+  RiPencilLine, RiScissorsLine, RiShieldLine, RiShieldFill, RiKeyLine,
+  RiLockLine, RiLockUnlockLine, RiPlayLine, RiPauseLine, RiVolumeUpLine,
+  RiMicLine, RiHeadphoneLine, RiSunLine, RiMoonLine, RiCloudLine,
+  RiCarLine, RiPlaneLine, RiShipLine, RiAnchorLine, RiTimeLine,
+  RiSmartphoneLine, RiComputerLine
+} from "react-icons/ri";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type IconComp = React.FC<{ size?: number; color?: string; strokeWidth?: number; className?: string }>;
@@ -84,13 +99,48 @@ const EMOJI_CATS: Record<string, string[]> = {
   "🎉 Fun": ["🎉","🎊","🎸","🎹","🚀","💻","📱","🎨","📸","🔮","🎭","🏆","🎯","🎪","🎲","🃏","🧩","🎮","🎬","🎤","🎠","🎡","🛸","🎰","🧸"],
 };
 
-// ── Icon map ──────────────────────────────────────────────────────────────────
+// ── Icon map (Remix Icons) ───────────────────────────────────────────────────
 const ICON_MAP: Record<string, IconComp> = {
-  Heart, Star, Flame, Zap, Crown, Gift, Trophy, Bell, Bookmark, Coffee,
-  Rocket, Globe, Home, Music, Camera, Diamond, Cloud, Sun, Moon, Leaf,
-  Mountain, Fish, Bird, Car, Plane, Anchor, Shield, Key, Compass,
-  Phone, Mail, Clock, Headphones, Mic, Video, Book, Pencil, Scissors,
-  Wrench, Lock, Smile, Frown, Meh, Gamepad2, Palette, Sparkles, Gem,
+  // Favorites
+  "Heart Line": RiHeartLine, "Heart Fill": RiHeartFill,
+  "Star Line": RiStarLine, "Star Fill": RiStarFill,
+  "Flame Line": RiFireLine, "Flame Fill": RiFireFill,
+  "Crown Line": RiVipCrownLine, "Crown Fill": RiVipCrownFill,
+  "Trophy Line": RiTrophyLine, "Trophy Fill": RiTrophyFill,
+  "Gift Line": RiGiftLine, "Gift Fill": RiGiftFill,
+  "Sparkles Line": RiSparkling2Line, "Sparkles Fill": RiSparkling2Fill,
+  
+  // Media / Tech
+  "Music": RiMusic2Line, "Music Fill": RiMusic2Fill,
+  "Camera": RiCameraLine, "Camera Fill": RiCameraFill,
+  "Gamepad": RiGamepadLine, "Gamepad Fill": RiGamepadFill,
+  "Headphones": RiHeadphoneLine, "Microphone": RiMicLine,
+  "Volume Up": RiVolumeUpLine, "Play": RiPlayLine, "Pause": RiPauseLine,
+  "Computer": RiComputerLine, "Phone": RiSmartphoneLine,
+  
+  // Design / Tools
+  "Palette Line": RiPaletteLine, "Palette Fill": RiPaletteFill,
+  "Brush Line": RiPaintBrushLine, "Brush Fill": RiPaintBrushFill,
+  "Lightbulb Line": RiLightbulbLine, "Lightbulb Fill": RiLightbulbFill,
+  "Tools": RiToolsLine, "Pencil": RiPencilLine, "Scissors": RiScissorsLine,
+  
+  // System / Business
+  "Home Line": RiHome2Line, "Home Fill": RiHome2Fill,
+  "Search": RiSearchLine, "Settings": RiSettings3Line,
+  "User Line": RiUser3Line, "User Fill": RiUser3Fill,
+  "Team": RiTeamLine, "Mail": RiMailLine, "Send": RiMailSendLine,
+  "Chat": RiChat3Line, "Discuss": RiDiscussLine,
+  
+  // Objects / Places
+  "Cup": RiCupLine, "Rocket Line": RiRocketLine, "Rocket Fill": RiRocketFill,
+  "Globe": RiGlobalLine, "Compass": RiCompassLine, "Key": RiKeyLine,
+  "Lock": RiLockLine, "Unlock": RiLockUnlockLine, "Shield Line": RiShieldLine, "Shield Fill": RiShieldFill,
+  "Clock": RiTimeLine, "Folder Open": RiFolderOpenLine, "File Text": RiFileTextLine,
+  "Book Mark Line": RiBookmarkLine, "Book Mark Fill": RiBookmarkFill,
+  
+  // Travel / Weather
+  "Car": RiCarLine, "Plane": RiPlaneLine, "Ship": RiShipLine, "Anchor": RiAnchorLine,
+  "Sun": RiSunLine, "Moon": RiMoonLine, "Cloud": RiCloudLine, "Flashlight": RiFlashlightLine
 };
 
 // ── Helper: load Google Font ──────────────────────────────────────────────────
@@ -195,7 +245,6 @@ export default function App() {
   const [pendingIcon, setPendingIcon] = useState<string | null>(null);
 
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState<number | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
@@ -586,6 +635,7 @@ export default function App() {
   // Export as PNG image (Retina/high-res scaled by 2)
   const exportAsPNG = useCallback(async () => {
     if (!editorRef.current) return;
+    setIsExporting(true);
     try {
       const width = editorRef.current.offsetWidth;
       const height = editorRef.current.offsetHeight;
@@ -610,144 +660,8 @@ export default function App() {
     } catch (err) {
       console.error("Export PNG failed", err);
       alert("导出图片失败，或外部图片跨域加载受限。请检查控制台错误信息。");
-    }
-  }, [bgColor]);
-
-  // Export as animated GIF using domtoimage frames in loop & gifshot
-  const exportAsGIF = useCallback(async () => {
-    if (!editorRef.current) return;
-    setIsExporting(true);
-    setExportProgress(0);
-
-    const numFrames = 15;
-    const frameDelay = 150;
-    const frames: string[] = [];
-    const width = editorRef.current.offsetWidth;
-    const height = editorRef.current.offsetHeight;
-
-    try {
-      for (let i = 0; i < numFrames; i++) {
-        const dataUrl = await domtoimage.toPng(editorRef.current, {
-          width: width,
-          height: height,
-          bgcolor: bgColor
-        });
-        frames.push(dataUrl);
-        setExportProgress(Math.round(((i + 1) / numFrames) * 50));
-        await new Promise((resolve) => setTimeout(resolve, frameDelay));
-      }
-
-      setExportProgress(60);
-      // @ts-ignore
-      gifshot.createGIF({
-        images: frames,
-        interval: frameDelay / 1000,
-        gifWidth: width,
-        gifHeight: height,
-        numFrames: numFrames,
-        sampleInterval: 10,
-        numWorkers: 2,
-      }, function (obj: any) {
-        if (!obj.error) {
-          setExportProgress(100);
-          const link = document.createElement("a");
-          link.download = `moonvy-text-${Date.now()}.gif`;
-          link.href = obj.image;
-          link.click();
-          setTimeout(() => {
-            setIsExporting(false);
-            setExportProgress(null);
-          }, 1000);
-        } else {
-          console.error("gifshot error", obj.error);
-          alert("生成 GIF 失败：" + obj.error);
-          setIsExporting(false);
-          setExportProgress(null);
-        }
-      });
-    } catch (err) {
-      console.error("Export GIF failed", err);
-      alert("导出 GIF 失败，或外部图片跨域加载受限。请检查控制台。");
+    } finally {
       setIsExporting(false);
-      setExportProgress(null);
-    }
-  }, [bgColor]);
-
-  // Export as WebM dynamic video
-  const exportAsWebM = useCallback(async () => {
-    if (!editorRef.current) return;
-    setIsExporting(true);
-    setExportProgress(0);
-
-    const numFrames = 30; // 3 seconds at 10fps
-    const frameDelay = 100;
-    const width = editorRef.current.offsetWidth;
-    const height = editorRef.current.offsetHeight;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const stream = canvas.captureStream(10);
-    let options = { mimeType: "video/webm;codecs=vp9" };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: "video/webm" };
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: "" };
-    }
-
-    const recordedChunks: BlobPart[] = [];
-    const mediaRecorder = new MediaRecorder(stream, options);
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordedChunks.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.download = `moonvy-text-${Date.now()}.webm`;
-      link.href = url;
-      link.click();
-      setIsExporting(false);
-      setExportProgress(null);
-    };
-
-    mediaRecorder.start();
-
-    try {
-      for (let i = 0; i < numFrames; i++) {
-        const dataUrl = await domtoimage.toPng(editorRef.current, {
-          width: width,
-          height: height,
-          bgcolor: bgColor
-        });
-        
-        await new Promise<void>((resolveImg) => {
-          const img = new Image();
-          img.onload = () => {
-            ctx.clearRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
-            resolveImg();
-          };
-          img.src = dataUrl;
-        });
-
-        setExportProgress(Math.round(((i + 1) / numFrames) * 100));
-        await new Promise((resolve) => setTimeout(resolve, frameDelay));
-      }
-      mediaRecorder.stop();
-    } catch (err) {
-      console.error("Recording failed", err);
-      alert("录制视频失败，或外部图片跨域加载受限。请检查控制台。");
-      setIsExporting(false);
-      setExportProgress(null);
     }
   }, [bgColor]);
 
@@ -1353,24 +1267,6 @@ export default function App() {
           >
             <Camera size={13} />
             <span>{isExporting ? "生成中..." : "导出图片"}</span>
-          </button>
-          <button
-            className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-violet-600/10 cursor-pointer"
-            onClick={exportAsGIF}
-            title="录制并导出为动态 GIF 图 (真动图，防卡顿)"
-            disabled={isExporting}
-          >
-            <Video size={13} />
-            <span>{isExporting ? `动图 ${exportProgress}%` : "导出动图"}</span>
-          </button>
-          <button
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-emerald-600/10 cursor-pointer"
-            onClick={exportAsWebM}
-            title="录制高清 WebM 动态视频 (支持透明度，极高画质)"
-            disabled={isExporting}
-          >
-            <Zap size={13} />
-            <span>{isExporting ? `视频 ${exportProgress}%` : "导出视频"}</span>
           </button>
         </div>
       </header>
