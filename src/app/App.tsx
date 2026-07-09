@@ -87,6 +87,15 @@ const GOOGLE_FONTS = [
   { name: "DM Serif Display", category: "Serif" },
   { name: "Cinzel", category: "Serif" },
   { name: "Press Start 2P", category: "Pixel" },
+  // Chinese Fonts
+  { name: "Noto Sans SC", category: "Chinese" },
+  { name: "Noto Serif SC", category: "Chinese" },
+  { name: "ZCOOL QingKe HuangYou", category: "Chinese" },
+  { name: "ZCOOL XiaoWei", category: "Chinese" },
+  { name: "ZCOOL KuaiLe", category: "Chinese" },
+  { name: "Ma Shan Zheng", category: "Chinese" },
+  { name: "Zhi Mang Xing", category: "Chinese" },
+  { name: "Long Cang", category: "Chinese" },
 ];
 
 // ── Emoji categories ──────────────────────────────────────────────────────────
@@ -147,9 +156,14 @@ const ICON_MAP: Record<string, IconComp> = {
 async function loadGoogleFont(name: string) {
   const id = `gf-${name.replace(/\s+/g, "-")}`;
   if (document.getElementById(id)) return;
-
   try {
-    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;0,900;1,400&display=swap`;
+    let url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;0,900;1,400&display=swap`;
+    if (["Noto Sans SC", "Noto Serif SC", "ZCOOL QingKe HuangYou", "ZCOOL XiaoWei", "ZCOOL KuaiLe", "Ma Shan Zheng", "Zhi Mang Xing", "Long Cang"].includes(name)) {
+      url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:wght@400;700&display=swap`;
+      if (["ZCOOL QingKe HuangYou", "ZCOOL XiaoWei", "ZCOOL KuaiLe", "Ma Shan Zheng", "Zhi Mang Xing", "Long Cang"].includes(name)) {
+        url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}&display=swap`;
+      }
+    }
     
     // 1. Load stylesheet normally for preview in browser
     const link = document.createElement("link");
@@ -834,7 +848,7 @@ export default function App() {
   // ── Render Helpers ───────────────────────────────────────────────────────────
   const renderFontMenuContent = () => {
     return (
-      <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* ── Source tabs ── */}
         <div className="flex border-b border-white/[0.07] flex-shrink-0">
           {(["google", "local"] as const).map((src) => (
@@ -899,7 +913,14 @@ export default function App() {
                   }`}
                   onClick={() => setFontCat(cat)}
                 >
-                  {cat}
+                  {cat === "All" ? "全部" :
+                   cat === "Display" ? "艺术/标题" :
+                   cat === "Handwriting" ? "手写" :
+                   cat === "Script" ? "花体" :
+                   cat === "Sans" ? "无衬线" :
+                   cat === "Serif" ? "衬线" :
+                   cat === "Pixel" ? "像素" :
+                   cat === "Chinese" ? "中文" : cat}
                 </button>
               ))}
             </div>
@@ -927,9 +948,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Local Fonts tab ── */}
         {fontSource === "local" && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* ── Status area ── */}
             {localFontsStatus === "idle" && (
               <div className="flex flex-col items-center gap-3 py-8 px-5">
@@ -1600,8 +1620,8 @@ export default function App() {
         {/* Mobile Font Menu Drawer */}
         {isMobile && showFontMenu && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowFontMenu(false)} />
-            <div className="relative w-full max-h-[70vh] bg-[#18181c] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowFontMenu(false)} />
+            <div className="relative w-full h-[60vh] bg-[#18181c] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
               <div className="flex justify-center py-2 flex-shrink-0">
                 <div className="w-12 h-1.5 rounded-full bg-white/20" />
               </div>
@@ -1611,7 +1631,7 @@ export default function App() {
                   <X size={16} />
                 </button>
               </div>
-              <div className="flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
                 {renderFontMenuContent()}
               </div>
             </div>
@@ -1620,8 +1640,8 @@ export default function App() {
         {/* Mobile Emoji Drawer */}
         {isMobile && showEmojiPanel && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowEmojiPanel(false)} />
-            <div className="relative w-full max-h-[70vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+            <div className="fixed inset-0 bg-black/25" onClick={() => setShowEmojiPanel(false)} />
+            <div className="relative w-full h-[50vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
               <div className="flex justify-center py-2 flex-shrink-0">
                 <div className="w-12 h-1.5 rounded-full bg-white/20" />
               </div>
@@ -1641,8 +1661,8 @@ export default function App() {
         {/* Mobile Icons Drawer */}
         {isMobile && showIconPanel && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowIconPanel(false)} />
-            <div className="relative w-full max-h-[70vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+            <div className="fixed inset-0 bg-black/25" onClick={() => setShowIconPanel(false)} />
+            <div className="relative w-full h-[50vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
               <div className="flex justify-center py-2 flex-shrink-0">
                 <div className="w-12 h-1.5 rounded-full bg-white/20" />
               </div>
