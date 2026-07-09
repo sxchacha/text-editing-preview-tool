@@ -1323,7 +1323,10 @@ export default function App() {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <Type size={13} className="text-white" />
             </div>
-            <span className="text-white font-semibold text-[13px] tracking-tight">Moonvy·Text</span>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold text-[13px] tracking-tight">Moonvy·Text</span>
+              <span className="text-white/35 text-[10px] border-l border-white/15 pl-2 select-none">把文字变成视觉作品</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-1">
