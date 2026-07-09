@@ -11,7 +11,7 @@ import {
   Mountain, Fish, Bird, Car, Plane, Anchor, Shield, Key, Compass,
   Phone, Mail, Clock, Headphones, Mic, Video, Book, Pencil, Scissors,
   Wrench, Lock, Smile, Frown, Meh, Gamepad2, Palette, Sparkles, Gem,
-  Bold, Italic, ImagePlus, Search, ChevronDown, Check, RotateCcw,
+  Bold, Italic, ImagePlus, Search, ChevronDown, Check, RotateCcw, Wand2,
   AlignLeft, AlignCenter, AlignRight, Type, X, Monitor, RefreshCw, Undo, Redo,
 } from "lucide-react";
 import {
@@ -275,6 +275,7 @@ export default function App() {
   const [fluentCat, setFluentCat] = useState("😀 笑脸");
 
   const [showIconPanel, setShowIconPanel] = useState(false);
+  const [showTemplatesPanel, setShowTemplatesPanel] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
 
   const [pendingIcon, setPendingIcon] = useState<string | null>(null);
@@ -628,6 +629,68 @@ export default function App() {
     restoreSavedRange(savedRangeRef.current);
     document.execCommand("insertText", false, char);
     setTimeout(saveContent, 50);
+  }, [saveContent]);
+
+  // Preset templates database for "Create Something"
+  const PRESET_TEMPLATES = [
+    {
+      title: "☀️ 今日天气",
+      content: `☀️ 28°C\n\n今天的天气：\n\n阳光很好\n风也很轻\n\n适合：\n☕ 喝杯咖啡\n📖 看一本书\n🚶 出门散步\n\nHave a nice day.`
+    },
+    {
+      title: "🌤 今日心情",
+      content: `Today's Mood\n\n😊 开心指数\n\n████████░░ 80%\n\n今天：\n\n有一点忙\n但也有一点幸运\n\n✨ Keep going`
+    },
+    {
+      title: "🌙 夜晚记录",
+      content: `🌙 Good Night\n\n今天完成：\n\n✓ 工作\n✓ 学习\n✓ 一点点成长\n\n\nTomorrow\nwill be better.`
+    },
+    {
+      title: "☕ 今日碎片",
+      content: `Small Moments\n\n☕ 一杯咖啡\n\n🎧 一首歌\n\n🌿 一段安静的时间\n\n\n这些小事\n组成了今天。`
+    },
+    {
+      title: "🌈 今日幸运",
+      content: `Today's Lucky\n\n🍀 幸运事件：\n\n遇见一家很好吃的小店\n\n✨\n\n今天也被温柔对待了`
+    },
+    {
+      title: "🎧 当前状态",
+      content: `Now Playing\n\n🎵 Late Night Vibes\n\n\nMood:\n\n🌙 Calm\n☕ Cozy\n✨ Focus`
+    },
+    {
+      title: "🌱 成长记录",
+      content: `Day 032\n\n今天学会：\n\n✨ 一个新知识\n✨ 一个新方法\n✨ 一个新想法\n\n\nSlowly becoming better.`
+    },
+    {
+      title: "📸 照片配文",
+      content: `Weekend\n\n📍 Somewhere\n\n\nNo plans.\nNo rush.\n\nJust enjoying today.`
+    },
+    {
+      title: "🐱 宠物 / 可爱风",
+      content: `Today's Happiness\n\n🐱\n\n来自：\n\n一个拥抱\n一顿美食\n一个小瞬间\n\n♡`
+    }
+  ];
+
+  const insertTemplate = useCallback((content: string) => {
+    editorRef.current?.focus();
+    restoreSavedRange(savedRangeRef.current);
+
+    // Convert newlines to formatted div tags
+    const html = content
+      .split("\n")
+      .map((line) => line === "" ? "<div><br></div>" : `<div>${line}</div>`)
+      .join("");
+
+    const isEmpty = !editorRef.current?.innerText.trim();
+    if (isEmpty) {
+      if (editorRef.current) {
+        editorRef.current.innerHTML = html;
+      }
+    } else {
+      document.execCommand("insertHTML", false, html);
+    }
+    setTimeout(saveContent, 50);
+    setShowTemplatesPanel(false);
   }, [saveContent]);
 
   // Handle animated & static media upload
@@ -1263,6 +1326,38 @@ export default function App() {
     );
   };
 
+  const renderTemplatesPanelContent = () => {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 bg-[#111114]">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2 flex-shrink-0 border-b border-white/[0.06]">
+          <span className="text-white/45 text-[11px] font-medium">选择卡片模板快速创造内容</span>
+          {!isMobile && (
+            <button onClick={() => setShowTemplatesPanel(false)} className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 cursor-pointer">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+        <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-2.5 scrollbar-none">
+          {PRESET_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.title}
+              onClick={() => insertTemplate(tpl.content)}
+              className="w-full text-left p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.12] hover:shadow-lg hover:shadow-indigo-500/[0.02] transition-all cursor-pointer group flex flex-col gap-1.5"
+            >
+              <span className="text-white font-semibold text-xs group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
+                <Wand2 size={12} className="text-indigo-400/80" />
+                {tpl.title}
+              </span>
+              <pre className="text-white/30 text-[10px] font-sans overflow-hidden leading-relaxed whitespace-pre-line pointer-events-none line-clamp-3">
+                {tpl.content}
+              </pre>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0a0a0d]" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Hidden SVG staging area */}
@@ -1516,8 +1611,25 @@ export default function App() {
             </div>
           </div>
 
-          {/* Pill 3: Insert actions (Image, Emoji, Icons) */}
+          {/* Pill 3: Insert actions (Create Something, Image, Emoji, Icons) */}
           <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl flex-shrink-0">
+            {/* Create Something Toggle */}
+            <button
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                showTemplatesPanel
+                  ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                  : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
+              }`}
+              onClick={() => {
+                setShowTemplatesPanel((v) => !v);
+                setShowEmojiPanel(false);
+                setShowIconPanel(false);
+              }}
+            >
+              <Wand2 size={13} className="text-indigo-400" />
+              <span>创造一些东西</span>
+            </button>
+
             {/* Upload image / SVG */}
             <button
               className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.07] text-white/70 hover:text-white px-3 py-1.5 rounded-lg text-[12px] transition-colors cursor-pointer"
@@ -1536,7 +1648,11 @@ export default function App() {
                   ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
                   : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
               }`}
-              onClick={() => setShowEmojiPanel((v) => !v)}
+              onClick={() => {
+                setShowEmojiPanel((v) => !v);
+                setShowIconPanel(false);
+                setShowTemplatesPanel(false);
+              }}
             >
               <span className="text-base leading-none">😀</span>
               <span>Emoji</span>
@@ -1549,7 +1665,11 @@ export default function App() {
                   ? "bg-violet-500/15 text-violet-300 border-violet-500/30"
                   : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
               }`}
-              onClick={() => setShowIconPanel((v) => !v)}
+              onClick={() => {
+                setShowIconPanel((v) => !v);
+                setShowEmojiPanel(false);
+                setShowTemplatesPanel(false);
+              }}
             >
               <Sparkles size={14} />
               <span>Icons</span>
@@ -1613,10 +1733,11 @@ export default function App() {
         </div>
 
         {/* Right: Sidebar (Desktop only) */}
-        {!isMobile && (showEmojiPanel || showIconPanel) && (
+        {!isMobile && (showEmojiPanel || showIconPanel || showTemplatesPanel) && (
           <div className="w-[320px] border-l border-white/[0.07] bg-[#111114] flex flex-col flex-shrink-0 divide-y divide-white/[0.06] overflow-hidden">
             {showEmojiPanel && renderEmojiPanelContent()}
             {showIconPanel && renderIconPanelContent()}
+            {showTemplatesPanel && renderTemplatesPanelContent()}
           </div>
         )}
 
@@ -1677,6 +1798,27 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
                 {renderIconPanelContent()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Templates Drawer */}
+        {isMobile && showTemplatesPanel && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div className="fixed inset-0 bg-black/25" onClick={() => setShowTemplatesPanel(false)} />
+            <div className="relative w-full h-[50vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+              <div className="flex justify-center py-2 flex-shrink-0">
+                <div className="w-12 h-1.5 rounded-full bg-white/20" />
+              </div>
+              <div className="flex items-center justify-between px-4 pb-2 border-b border-white/[0.07] flex-shrink-0">
+                <span className="text-white font-semibold text-sm">创造一些东西</span>
+                <button onClick={() => setShowTemplatesPanel(false)} className="text-white/40 hover:text-white/70 p-1 cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+                {renderTemplatesPanelContent()}
               </div>
             </div>
           </div>
