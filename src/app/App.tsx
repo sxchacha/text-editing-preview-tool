@@ -188,6 +188,83 @@ async function loadGoogleFont(name: string) {
   }
 }
 
+// ── Chinese Web Fonts (中文网字计划) ───────────────────────────────────────────
+const CHINESE_WEB_FONTS = [
+  {
+    name: "得意黑 (Smiley Sans)",
+    family: "Smiley Sans Oblique",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/dyh/dist/SmileySans-Oblique/result.css",
+  },
+  {
+    name: "霞鹜文楷 (LXGW WenKai)",
+    family: "LXGW WenKai",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/lxgwwenkai/dist/LXGWWenKai-Regular/result.css",
+  },
+  {
+    name: "汇文明朝体 (Huiwen Mincho)",
+    family: "Huiwen-mincho",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/hwmct/dist/%E6%B1%87%E6%96%8E%E6%98%8E%E6%9C%9D%E4%BD%93/result.css",
+  },
+  {
+    name: "霞鹜新致宋 (Neo ZhiSong)",
+    family: "LXGW Neo ZhiSong",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/LxgwNeoZhiSong/dist/LXGWNeoZhiSong/result.css",
+  },
+  {
+    name: "上图东观体 (DongGuanTi)",
+    family: "STDongGuanTi",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/stdgt/dist/%E4%B8%8A%E5%9B%BE%E4%B8%9C%E8%A7%82%E4%BD%93-%E5%B8%B8%E8%A7%84/result.css",
+  },
+  {
+    name: "Cubic 像素体 (Cubic 11)",
+    family: "Cubic 11",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/cubic/dist/Cubic/result.css",
+  },
+  {
+    name: "月星楷 (Moon Stars Kai)",
+    family: "Moon Stars Kai",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/moon-stars-kai/dist/MoonStarsKai-Regular/result.css",
+  },
+  {
+    name: "澳声通拼音文楷 (Pinyin WenKai)",
+    family: "ToneOZ-Pinyin-WenKai-Regular",
+    url: "https://chinese-fonts-cdn.konghayao.deno.net/packages/ToneOZ-Pinyin-WenKai/dist/ToneOZ-Pinyin-WenKai-Regular/result.css",
+  }
+];
+
+async function loadCustomChineseFont(family: string, url: string) {
+  const id = `cf-${family.replace(/\s+/g, "-")}`;
+  if (document.getElementById(id)) return;
+
+  try {
+    // 1. Load stylesheet normally for preview in browser
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.crossOrigin = "anonymous";
+    link.href = url;
+    document.head.appendChild(link);
+
+    // 2. Also fetch the CSS text and inject it into a local <style> tag.
+    // This ensures dom-to-image-more has direct local access to the @font-face rules!
+    const res = await fetch(url);
+    if (res.ok) {
+      const cssText = await res.text();
+      const style = document.createElement("style");
+      style.id = `${id}-local-style`;
+      style.textContent = cssText;
+      document.head.appendChild(style);
+    }
+  } catch (err) {
+    console.error("Failed to load custom Chinese web font:", err);
+  }
+}
+
+function getFontDisplayName(family: string): string {
+  const f = CHINESE_WEB_FONTS.find((cf) => cf.family === family);
+  return f ? f.name : family;
+}
+
 // ── Helper: restore saved range ───────────────────────────────────────────────
 function restoreSavedRange(savedRange: Range | null): boolean {
   if (!savedRange) return false;
@@ -261,7 +338,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
 
   const [showFontMenu, setShowFontMenu] = useState(false);
-  const [fontSource, setFontSource] = useState<"google" | "local">("google");
+  const [fontSource, setFontSource] = useState<"google" | "chinese" | "local">("google");
   const [fontSearch, setFontSearch] = useState("");
   const [fontCat, setFontCat] = useState("All");
   const [localFonts, setLocalFonts] = useState<string[]>([]);
@@ -527,9 +604,13 @@ export default function App() {
   }, [saveContent]);
 
   // Change font (global or selection)
-  const changeFont = useCallback((name: string) => {
-    loadGoogleFont(name);
-    setFontFamily(name);
+  const changeFont = useCallback((family: string, isCustom = false, url?: string) => {
+    if (isCustom && url) {
+      loadCustomChineseFont(family, url);
+    } else {
+      loadGoogleFont(family);
+    }
+    setFontFamily(family);
     setShowFontMenu(false);
     setFontSearch("");
 
@@ -538,10 +619,10 @@ export default function App() {
 
     if (hasSelection) {
       document.execCommand("styleWithCSS", false, "true");
-      document.execCommand("fontName", false, name);
+      document.execCommand("fontName", false, family);
     } else {
       if (editorRef.current) {
-        editorRef.current.style.fontFamily = `'${name}', sans-serif`;
+        editorRef.current.style.fontFamily = `'${family}', sans-serif`;
       }
     }
     editorRef.current?.focus();
@@ -910,11 +991,16 @@ export default function App() {
 
   // ── Render Helpers ───────────────────────────────────────────────────────────
   const renderFontMenuContent = () => {
+    const filteredChineseFonts = CHINESE_WEB_FONTS.filter((font) =>
+      font.name.toLowerCase().includes(fontSearch.toLowerCase()) ||
+      font.family.toLowerCase().includes(fontSearch.toLowerCase())
+    );
+
     return (
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* ── Source tabs ── */}
         <div className="flex border-b border-white/[0.07] flex-shrink-0">
-          {(["google", "local"] as const).map((src) => (
+          {(["google", "chinese", "local"] as const).map((src) => (
             <button
               key={src}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-pointer ${
@@ -924,8 +1010,8 @@ export default function App() {
               }`}
               onClick={() => setFontSource(src)}
             >
-              {src === "google" ? <Globe size={11} /> : <Monitor size={11} />}
-              {src === "google" ? "谷歌字体" : "已安装字体"}
+              {src === "google" ? <Globe size={11} /> : src === "chinese" ? <Sparkles size={11} /> : <Monitor size={11} />}
+              {src === "google" ? "谷歌字体" : src === "chinese" ? "中文网字" : "已安装字体"}
               {src === "local" && localFontsStatus === "success" && (
                 <span className="bg-indigo-600/60 text-white/80 text-[9px] px-1 rounded-full leading-tight">
                   {localFonts.length}
@@ -942,17 +1028,23 @@ export default function App() {
             <input
               autoFocus={!isMobile}
               className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
-              placeholder={fontSource === "google" ? "搜索谷歌字体…" : "搜索已安装字体…"}
-              value={fontSource === "google" ? fontSearch : localFontSearch}
-              onChange={(e) =>
+              placeholder={
                 fontSource === "google"
-                  ? setFontSearch(e.target.value)
-                  : setLocalFontSearch(e.target.value)
+                  ? "搜索谷歌字体…"
+                  : fontSource === "chinese"
+                  ? "搜索中文网字…"
+                  : "搜索已安装字体…"
+              }
+              value={fontSource === "local" ? localFontSearch : fontSearch}
+              onChange={(e) =>
+                fontSource === "local"
+                  ? setLocalFontSearch(e.target.value)
+                  : setFontSearch(e.target.value)
               }
             />
-            {(fontSource === "google" ? fontSearch : localFontSearch) && (
+            {(fontSource === "local" ? localFontSearch : fontSearch) && (
               <button
-                onClick={() => fontSource === "google" ? setFontSearch("") : setLocalFontSearch("")}
+                onClick={() => fontSource === "local" ? setLocalFontSearch("") : setFontSearch("")}
                 className="text-white/20 hover:text-white/50 transition-colors cursor-pointer"
               >
                 <X size={11} />
@@ -1005,6 +1097,32 @@ export default function App() {
                 </button>
               ))}
               {filteredFonts.length === 0 && (
+                <div className="text-white/25 text-sm text-center py-8">没有找到字体</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Chinese Web Fonts tab ── */}
+        {fontSource === "chinese" && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Font list */}
+            <div className="overflow-y-auto py-1 flex-1 min-h-0" style={{ maxHeight: isMobile ? undefined : 300 }}>
+              {filteredChineseFonts.map((font) => (
+                <button
+                  key={font.family}
+                  className={`font-row w-full text-left px-4 py-3 flex items-center justify-between transition-colors cursor-pointer ${
+                    fontFamily === font.family ? "text-indigo-400" : "text-white/75"
+                  }`}
+                  style={{ fontFamily: `'${font.family}', sans-serif`, fontSize: 17 }}
+                  onClick={() => changeFont(font.family, true, font.url)}
+                  onMouseEnter={() => loadCustomChineseFont(font.family, font.url)}
+                >
+                  <span>{font.name}</span>
+                  {fontFamily === font.family && <Check size={13} className="text-indigo-400 flex-shrink-0 ml-2" />}
+                </button>
+              ))}
+              {filteredChineseFonts.length === 0 && (
                 <div className="text-white/25 text-sm text-center py-8">没有找到字体</div>
               )}
             </div>
@@ -1471,7 +1589,7 @@ export default function App() {
                   className="flex-1 text-left truncate text-[15px]"
                   style={{ fontFamily: `'${fontFamily}', sans-serif` }}
                 >
-                  {fontFamily}
+                  {getFontDisplayName(fontFamily)}
                 </span>
                 <ChevronDown size={12} className="text-white/30 flex-shrink-0" />
               </button>
