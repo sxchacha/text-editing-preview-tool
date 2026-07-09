@@ -12,7 +12,7 @@ import {
   Phone, Mail, Clock, Headphones, Mic, Video, Book, Pencil, Scissors,
   Wrench, Lock, Smile, Frown, Meh, Gamepad2, Palette, Sparkles, Gem,
   Bold, Italic, ImagePlus, Search, ChevronDown, Check, RotateCcw,
-  AlignLeft, AlignCenter, AlignRight, Type, X, Monitor, RefreshCw,
+  AlignLeft, AlignCenter, AlignRight, Type, X, Monitor, RefreshCw, Undo, Redo,
 } from "lucide-react";
 import {
   RiHeartLine, RiHeartFill, RiStarLine, RiStarFill, RiFireLine, RiFireFill,
@@ -244,6 +244,7 @@ export default function App() {
   const [bgColor, setBgColor] = useState(() => localStorage.getItem("moonvy_bg_color") || "#fafaf8");
   const [lineHeight, setLineHeight] = useState(() => Number(localStorage.getItem("moonvy_line_height")) || 1.25);
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right">(() => (localStorage.getItem("moonvy_text_align") as any) || "left");
+  const [isMobile, setIsMobile] = useState(false);
 
   const [showFontMenu, setShowFontMenu] = useState(false);
   const [fontSource, setFontSource] = useState<"google" | "local">("google");
@@ -287,6 +288,16 @@ export default function App() {
     localStorage.setItem("moonvy_bg_color", bgColor);
   }, [fontFamily, fontSize, lineHeight, textAlign, textColor, bgColor]);
 
+  // Detect mobile size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Save editor content and Lottie references helper
   const saveContent = useCallback(() => {
     if (editorRef.current) {
@@ -294,6 +305,46 @@ export default function App() {
     }
     localStorage.setItem("moonvy_lottie_data", JSON.stringify(Array.from(lottieDataRef.current.entries())));
   }, []);
+
+  const handleUndo = useCallback(() => {
+    editorRef.current?.focus();
+    document.execCommand("undo", false, undefined);
+    saveContent();
+  }, [saveContent]);
+
+  const handleRedo = useCallback(() => {
+    editorRef.current?.focus();
+    document.execCommand("redo", false, undefined);
+    saveContent();
+  }, [saveContent]);
+
+  const changeFontSize = useCallback((v: number) => {
+    setFontSize(v);
+    const sel = window.getSelection();
+    const hasSelection = sel && !sel.isCollapsed && editorRef.current?.contains(sel.anchorNode);
+
+    if (hasSelection) {
+      document.execCommand("styleWithCSS", false, "true");
+      document.execCommand("fontSize", false, "7");
+      if (editorRef.current) {
+        editorRef.current.querySelectorAll("span").forEach((span) => {
+          if (
+            span.style.fontSize === "xx-large" ||
+            span.style.fontSize === "-webkit-xxx-large" ||
+            span.getAttribute("size") === "7"
+          ) {
+            span.style.fontSize = `${v}px`;
+            span.removeAttribute("size");
+          }
+        });
+      }
+      saveContent();
+    } else {
+      if (editorRef.current) {
+        editorRef.current.style.fontSize = `${v}px`;
+      }
+    }
+  }, [saveContent]);
 
   // Restore content and settings on mount
   useLayoutEffect(() => {
@@ -780,6 +831,418 @@ export default function App() {
 
   const PendingIcon = pendingIcon ? ICON_MAP[pendingIcon] : null;
 
+  // ── Render Helpers ───────────────────────────────────────────────────────────
+  const renderFontMenuContent = () => {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        {/* ── Source tabs ── */}
+        <div className="flex border-b border-white/[0.07] flex-shrink-0">
+          {(["google", "local"] as const).map((src) => (
+            <button
+              key={src}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors border-b-2 -mb-px cursor-pointer ${
+                fontSource === src
+                  ? "text-white border-indigo-500"
+                  : "text-white/35 border-transparent hover:text-white/60"
+              }`}
+              onClick={() => setFontSource(src)}
+            >
+              {src === "google" ? <Globe size={11} /> : <Monitor size={11} />}
+              {src === "google" ? "谷歌字体" : "已安装字体"}
+              {src === "local" && localFontsStatus === "success" && (
+                <span className="bg-indigo-600/60 text-white/80 text-[9px] px-1 rounded-full leading-tight">
+                  {localFonts.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Search bar (shared) ── */}
+        <div className="p-2.5 border-b border-white/[0.07] flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white/[0.05] rounded-lg px-3">
+            <Search size={12} className="text-white/25 flex-shrink-0" />
+            <input
+              autoFocus={!isMobile}
+              className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
+              placeholder={fontSource === "google" ? "搜索谷歌字体…" : "搜索已安装字体…"}
+              value={fontSource === "google" ? fontSearch : localFontSearch}
+              onChange={(e) =>
+                fontSource === "google"
+                  ? setFontSearch(e.target.value)
+                  : setLocalFontSearch(e.target.value)
+              }
+            />
+            {(fontSource === "google" ? fontSearch : localFontSearch) && (
+              <button
+                onClick={() => fontSource === "google" ? setFontSearch("") : setLocalFontSearch("")}
+                className="text-white/20 hover:text-white/50 transition-colors cursor-pointer"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Google Fonts tab ── */}
+        {fontSource === "google" && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Category chips */}
+            <div className="flex gap-1 px-2.5 py-2 border-b border-white/[0.07] overflow-x-auto flex-shrink-0 scrollbar-none">
+              {fontCategories.map((cat) => (
+                <button
+                  key={cat}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] whitespace-nowrap flex-shrink-0 transition-colors cursor-pointer ${
+                    fontCat === cat
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]"
+                  }`}
+                  onClick={() => setFontCat(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Font list */}
+            <div className="overflow-y-auto py-1 flex-1 min-h-0" style={{ maxHeight: isMobile ? undefined : 300 }}>
+              {filteredFonts.map((font) => (
+                <button
+                  key={font.name}
+                  className={`font-row w-full text-left px-4 py-3 flex items-center justify-between transition-colors cursor-pointer ${
+                    fontFamily === font.name ? "text-indigo-400" : "text-white/75"
+                  }`}
+                  style={{ fontFamily: `'${font.name}', sans-serif`, fontSize: 17 }}
+                  onClick={() => changeFont(font.name)}
+                  onMouseEnter={() => loadGoogleFont(font.name)}
+                >
+                  <span>{font.name}</span>
+                  {fontFamily === font.name && <Check size={13} className="text-indigo-400 flex-shrink-0 ml-2" />}
+                </button>
+              ))}
+              {filteredFonts.length === 0 && (
+                <div className="text-white/25 text-sm text-center py-8">没有找到字体</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Local Fonts tab ── */}
+        {fontSource === "local" && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+            {/* ── Status area ── */}
+            {localFontsStatus === "idle" && (
+              <div className="flex flex-col items-center gap-3 py-8 px-5">
+                <Monitor size={28} className="text-white/15" />
+                <p className="text-white/35 text-xs text-center leading-relaxed">
+                  读取本机字体需要浏览器授权
+                </p>
+                <button
+                  onClick={fetchLocalFonts}
+                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg transition-colors font-medium cursor-pointer"
+                >
+                  <Monitor size={12} />获取本地字体
+                </button>
+              </div>
+            )}
+
+            {localFontsStatus === "loading" && (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-white/30 text-xs">正在读取字体列表…</p>
+              </div>
+            )}
+
+            {localFontsStatus === "unsupported" && (
+              <div className="flex flex-col items-center gap-2 py-7 px-5">
+                <p className="text-white/35 text-xs text-center leading-relaxed">
+                  当前浏览器不支持本地字体 API
+                </p>
+                <p className="text-white/20 text-[10px] text-center">请使用 Chrome 103+ 或 Edge 103+</p>
+              </div>
+            )}
+
+            {localFontsStatus === "denied" && (
+              <div className="flex flex-col items-center gap-3 py-7 px-5">
+                <p className="text-white/35 text-xs text-center leading-relaxed">
+                  你在授权弹窗中拒绝了字体访问
+                </p>
+                <p className="text-white/20 text-[10px] text-center">
+                  可在浏览器地址栏左侧的锁图标中重置权限，然后重试
+                </p>
+                <button
+                  onClick={fetchLocalFonts}
+                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors cursor-pointer"
+                >
+                  <RefreshCw size={11} />重试
+                </button>
+              </div>
+            )}
+
+            {localFontsStatus === "blocked" && (
+              <div className="flex flex-col items-center gap-2 py-7 px-5">
+                <p className="text-white/35 text-xs text-center leading-relaxed">
+                  当前页面运行在 iframe 中<br />浏览器权限策略阻止了字体访问
+                </p>
+                <p className="text-white/20 text-[10px] text-center">
+                  请在独立标签页中打开本工具，<br />或使用下方手动输入
+                </p>
+              </div>
+            )}
+
+            {localFontsStatus === "error" && (
+              <div className="flex flex-col items-center gap-3 py-7 px-5">
+                <p className="text-white/30 text-xs text-center">获取失败，请重试</p>
+                <button
+                  onClick={fetchLocalFonts}
+                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors cursor-pointer"
+                >
+                  <RefreshCw size={11} />重试
+                </button>
+              </div>
+            )}
+
+            {/* Font list on success */}
+            {localFontsStatus === "success" && (
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] flex-shrink-0">
+                  <span className="text-white/25 text-[10px]">共 {localFonts.length} 个字体</span>
+                  <button
+                    onClick={fetchLocalFonts}
+                    className="flex items-center gap-1 text-white/30 hover:text-white/60 text-[10px] transition-colors cursor-pointer"
+                  >
+                    <RefreshCw size={10} />刷新
+                  </button>
+                </div>
+                <div className="overflow-y-auto py-1 flex-1 min-h-0" style={{ maxHeight: isMobile ? undefined : 220 }}>
+                  {filteredLocalFonts.map((name) => (
+                    <button
+                      key={name}
+                      className={`font-row w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors cursor-pointer ${
+                        fontFamily === name ? "text-indigo-400" : "text-white/75"
+                      }`}
+                      style={{ fontFamily: `'${name}', sans-serif`, fontSize: 15 }}
+                      onClick={() => applyLocalFont(name)}
+                    >
+                      <span className="truncate">{name}</span>
+                      {fontFamily === name && <Check size={13} className="text-indigo-400 flex-shrink-0 ml-2" />}
+                    </button>
+                  ))}
+                  {filteredLocalFonts.length === 0 && (
+                    <div className="text-white/25 text-sm text-center py-6">没有找到字体</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Common system fonts quick-pick ── */}
+            {localFontsStatus !== "loading" && localFontsStatus !== "success" && (
+              <div className="border-t border-white/[0.07] px-3 pt-3 pb-2 flex-shrink-0">
+                <p className="text-white/20 text-[10px] mb-2">常用系统字体</p>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    "PingFang SC", "微软雅黑", "黑体", "宋体", "楷体",
+                    "Helvetica Neue", "Arial", "Georgia", "Times New Roman", "Courier New",
+                  ].map((name) => (
+                    <button
+                      key={name}
+                      className="px-2 py-0.5 rounded text-[10px] bg-white/[0.06] text-white/45 hover:bg-white/[0.12] hover:text-white/80 transition-colors cursor-pointer"
+                      style={{ fontFamily: `'${name}', sans-serif` }}
+                      onClick={() => applyLocalFont(name)}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Manual font name input (always visible as fallback) ── */}
+            <div className="border-t border-white/[0.07] px-3 pt-3 pb-3 flex-shrink-0">
+              <p className="text-white/20 text-[10px] mb-2">手动输入字体名称</p>
+              <div className="flex gap-1.5">
+                <input
+                  className="flex-1 bg-white/[0.05] border border-white/[0.08] focus:border-indigo-500/50 text-white text-xs px-3 py-1.5 rounded-lg outline-none placeholder-white/20 transition-colors"
+                  placeholder="如：苹方、微软雅黑、Arial…"
+                  value={manualFontInput}
+                  onChange={(e) => setManualFontInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && manualFontInput.trim()) {
+                      applyLocalFont(manualFontInput.trim());
+                      setManualFontInput("");
+                    }
+                  }}
+                />
+                <button
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
+                  disabled={!manualFontInput.trim()}
+                  onClick={() => {
+                    if (manualFontInput.trim()) {
+                      applyLocalFont(manualFontInput.trim());
+                      setManualFontInput("");
+                    }
+                  }}
+                >
+                  应用
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderEmojiPanelContent = () => {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Header: source toggle + close */}
+        <div className="flex flex-col flex-shrink-0 border-b border-white/[0.06] gap-2">
+          {/* Line 1: Source tabs + Close button */}
+          <div className="flex items-center justify-between px-3 pt-2.5">
+            <div className="flex rounded-lg overflow-hidden border border-white/[0.08] flex-shrink-0">
+              {(["fluent", "system"] as const).map((src) => (
+                <button
+                  key={src}
+                  className={`px-3 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                    emojiSource === src
+                      ? "bg-white/[0.12] text-white"
+                      : "text-white/35 hover:text-white/60"
+                  }`}
+                  onClick={() => setEmojiSource(src)}
+                >
+                  {src === "system" ? "系统 Emoji" : "✦ Fluent"}
+                </button>
+              ))}
+            </div>
+            {!isMobile && (
+              <button onClick={() => setShowEmojiPanel(false)} className="text-white/25 hover:text-white/60 flex-shrink-0 transition-colors cursor-pointer p-1">
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          {/* Line 2: Category tabs (scrollable) */}
+          <div className="flex gap-1 px-3 pb-2.5 overflow-x-auto min-w-0 scrollbar-none">
+            {Object.keys(emojiSource === "system" ? EMOJI_CATS : FLUENT_EMOJI_CATS).map((cat) => {
+              const active = emojiSource === "system" ? cat === emojiCat : cat === fluentCat;
+              return (
+                <button
+                  key={cat}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] whitespace-nowrap flex-shrink-0 transition-colors cursor-pointer ${
+                    active
+                      ? emojiSource === "system"
+                        ? "bg-amber-500/20 text-amber-300"
+                        : "bg-indigo-500/20 text-indigo-300"
+                      : "bg-white/[0.06] text-white/35 hover:text-white/60"
+                  }`}
+                  onClick={() => emojiSource === "system" ? setEmojiCat(cat) : setFluentCat(cat)}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* System emoji grid */}
+        {emojiSource === "system" && (
+          <div className="px-3 py-2.5 grid gap-0.5 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(40px, 1fr))" }}>
+            {EMOJI_CATS[emojiCat].map((emoji) => (
+              <button
+                key={emoji}
+                className="emoji-btn text-2xl p-1.5 rounded-lg transition-colors text-center leading-none cursor-pointer"
+                onClick={() => insertEmoji(emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Fluent emoji image grid (animated PNG) */}
+        {emojiSource === "fluent" && (
+          <div className="px-3 py-2.5 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))" }}>
+            {(FLUENT_EMOJI_CATS[fluentCat] ?? []).map(([char, category, name]) => (
+              <button
+                key={`${category}/${name}`}
+                className="emoji-btn flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition-colors group cursor-pointer"
+                onClick={() => insertFluentEmoji(category, name, char)}
+                title={name}
+              >
+                <img
+                  src={fluentUrl(category, name)}
+                  alt={char}
+                  loading="lazy"
+                  className="w-8 h-8 object-contain group-hover:scale-110 transition-transform"
+                  onError={(e) => {
+                    const parent = (e.target as HTMLImageElement).parentElement;
+                    if (parent) {
+                      parent.innerHTML = `<span class="text-2xl leading-none">${char}</span>`;
+                      parent.onclick = () => insertEmoji(char);
+                    }
+                  }}
+                />
+                <span className="text-white/20 text-[8px] truncate w-full text-center leading-tight group-hover:text-white/40 transition-colors">{char}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderIconPanelContent = () => {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex items-center gap-3 px-4 pt-3 pb-2 flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.07] rounded-lg px-3 flex-1">
+            <Search size={12} className="text-white/25 flex-shrink-0" />
+            <input
+              autoFocus={!isMobile}
+              className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
+              placeholder="Search icons…"
+              value={iconSearch}
+              onChange={(e) => setIconSearch(e.target.value)}
+            />
+            {iconSearch && (
+              <button onClick={() => setIconSearch("")} className="text-white/20 hover:text-white/50 transition-colors cursor-pointer">
+                <X size={11} />
+              </button>
+            )}
+          </div>
+          {!isMobile && (
+            <button onClick={() => setShowIconPanel(false)} className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 cursor-pointer">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+
+        <div className="px-4 pb-4 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))" }}>
+          {filteredIcons.map((name) => {
+            const Icon = ICON_MAP[name];
+            return (
+              <button
+                key={name}
+                className="icon-btn flex flex-col items-center gap-1 p-2.5 rounded-xl transition-colors group cursor-pointer"
+                onClick={() => insertIcon(name)}
+                title={name}
+              >
+                <Icon size={22} className="text-white/60 group-hover:text-white transition-colors" />
+                <span className="text-white/25 group-hover:text-white/50 text-[9px] truncate w-full text-center leading-tight transition-colors">
+                  {name}
+                </span>
+              </button>
+            );
+          })}
+          {filteredIcons.length === 0 && (
+            <p className="text-white/25 text-sm col-span-full text-center py-6">No icons found</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0a0a0d]" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Hidden SVG staging area */}
@@ -814,485 +1277,280 @@ export default function App() {
         .font-row:hover { background: rgba(255,255,255,0.05); }
         .icon-btn:hover { background: rgba(255,255,255,0.08); }
         .emoji-btn:hover { background: rgba(255,255,255,0.08); }
+        
+        /* Mobile scrollbar hiding and sheets keyframes */
+        .scrollbar-none::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-none {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        @keyframes slide-up {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
       `}</style>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-2 px-4 py-2 bg-[#111114] border-b border-white/[0.07] flex-shrink-0 flex-wrap z-30">
-
-        {/* Logo */}
-        <div className="flex items-center gap-2 mr-3 flex-shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Type size={13} className="text-white" />
-          </div>
-          <span className="text-white font-semibold text-[13px] tracking-tight">Moonvy·Text</span>
-        </div>
-
-        <div className="w-px h-5 bg-white/[0.08] mr-1 flex-shrink-0" />
-
-        {/* ── Font Family ── */}
-        <div className="relative flex-shrink-0" ref={fontMenuRef}>
-          <button
-            className="flex items-center gap-2 bg-white/[0.05] hover:bg-white/[0.09] text-white px-3 py-1.5 rounded-lg text-sm transition-colors min-w-[148px] border border-white/[0.07]"
-            onClick={() => setShowFontMenu((v) => !v)}
-          >
-            <span
-              className="flex-1 text-left truncate text-[15px]"
-              style={{ fontFamily: `'${fontFamily}', sans-serif` }}
-            >
-              {fontFamily}
-            </span>
-            <ChevronDown size={12} className="text-white/30 flex-shrink-0" />
-          </button>
-
-          {showFontMenu && (
-            <div className="absolute top-full left-0 mt-1.5 w-[280px] bg-[#18181c] border border-white/[0.08] rounded-xl shadow-2xl shadow-black/60 z-50 flex flex-col overflow-hidden">
-
-              {/* ── Source tabs ── */}
-              <div className="flex border-b border-white/[0.07] flex-shrink-0">
-                {(["google", "local"] as const).map((src) => (
-                  <button
-                    key={src}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
-                      fontSource === src
-                        ? "text-white border-indigo-500"
-                        : "text-white/35 border-transparent hover:text-white/60"
-                    }`}
-                    onClick={() => setFontSource(src)}
-                  >
-                    {src === "google" ? <Globe size={11} /> : <Monitor size={11} />}
-                    {src === "google" ? "谷歌字体" : "已安装字体"}
-                    {src === "local" && localFontsStatus === "success" && (
-                      <span className="bg-indigo-600/60 text-white/80 text-[9px] px-1 rounded-full leading-tight">
-                        {localFonts.length}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* ── Search bar (shared) ── */}
-              <div className="p-2.5 border-b border-white/[0.07] flex-shrink-0">
-                <div className="flex items-center gap-2 bg-white/[0.05] rounded-lg px-3">
-                  <Search size={12} className="text-white/25 flex-shrink-0" />
-                  <input
-                    autoFocus
-                    className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
-                    placeholder={fontSource === "google" ? "搜索谷歌字体…" : "搜索已安装字体…"}
-                    value={fontSource === "google" ? fontSearch : localFontSearch}
-                    onChange={(e) =>
-                      fontSource === "google"
-                        ? setFontSearch(e.target.value)
-                        : setLocalFontSearch(e.target.value)
-                    }
-                  />
-                  {(fontSource === "google" ? fontSearch : localFontSearch) && (
-                    <button
-                      onClick={() => fontSource === "google" ? setFontSearch("") : setLocalFontSearch("")}
-                      className="text-white/20 hover:text-white/50 transition-colors"
-                    >
-                      <X size={11} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* ── Google Fonts tab ── */}
-              {fontSource === "google" && (
-                <>
-                  {/* Category chips */}
-                  <div className="flex gap-1 px-2.5 py-2 border-b border-white/[0.07] overflow-x-auto flex-shrink-0">
-                    {fontCategories.map((cat) => (
-                      <button
-                        key={cat}
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] whitespace-nowrap flex-shrink-0 transition-colors ${
-                          fontCat === cat
-                            ? "bg-indigo-600 text-white"
-                            : "bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]"
-                        }`}
-                        onClick={() => setFontCat(cat)}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Font list */}
-                  <div className="overflow-y-auto py-1" style={{ maxHeight: 300 }}>
-                    {filteredFonts.map((font) => (
-                      <button
-                        key={font.name}
-                        className={`font-row w-full text-left px-4 py-3 flex items-center justify-between transition-colors ${
-                          fontFamily === font.name ? "text-indigo-400" : "text-white/75"
-                        }`}
-                        style={{ fontFamily: `'${font.name}', sans-serif`, fontSize: 17 }}
-                        onClick={() => changeFont(font.name)}
-                        onMouseEnter={() => loadGoogleFont(font.name)}
-                      >
-                        <span>{font.name}</span>
-                        {fontFamily === font.name && <Check size={13} className="text-indigo-400 flex-shrink-0 ml-2" />}
-                      </button>
-                    ))}
-                    {filteredFonts.length === 0 && (
-                      <div className="text-white/25 text-sm text-center py-8">没有找到字体</div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* ── Local Fonts tab ── */}
-              {fontSource === "local" && (
-                <div className="flex flex-col">
-
-                  {/* ── Status area ── */}
-                  {localFontsStatus === "idle" && (
-                    <div className="flex flex-col items-center gap-3 py-8 px-5">
-                      <Monitor size={28} className="text-white/15" />
-                      <p className="text-white/35 text-xs text-center leading-relaxed">
-                        读取本机字体需要浏览器授权
-                      </p>
-                      <button
-                        onClick={fetchLocalFonts}
-                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg transition-colors font-medium"
-                      >
-                        <Monitor size={12} />获取本地字体
-                      </button>
-                    </div>
-                  )}
-
-                  {localFontsStatus === "loading" && (
-                    <div className="flex flex-col items-center gap-3 py-8">
-                      <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                      <p className="text-white/30 text-xs">正在读取字体列表…</p>
-                    </div>
-                  )}
-
-                  {localFontsStatus === "unsupported" && (
-                    <div className="flex flex-col items-center gap-2 py-7 px-5">
-                      <p className="text-white/35 text-xs text-center leading-relaxed">
-                        当前浏览器不支持本地字体 API
-                      </p>
-                      <p className="text-white/20 text-[10px] text-center">请使用 Chrome 103+ 或 Edge 103+</p>
-                    </div>
-                  )}
-
-                  {/* User explicitly denied the permission dialog */}
-                  {localFontsStatus === "denied" && (
-                    <div className="flex flex-col items-center gap-3 py-7 px-5">
-                      <p className="text-white/35 text-xs text-center leading-relaxed">
-                        你在授权弹窗中拒绝了字体访问
-                      </p>
-                      <p className="text-white/20 text-[10px] text-center">
-                        可在浏览器地址栏左侧的锁图标中重置权限，然后重试
-                      </p>
-                      <button
-                        onClick={fetchLocalFonts}
-                        className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors"
-                      >
-                        <RefreshCw size={11} />重试
-                      </button>
-                    </div>
-                  )}
-
-                  {/* SecurityError — iframe blocked the API before any prompt */}
-                  {localFontsStatus === "blocked" && (
-                    <div className="flex flex-col items-center gap-2 py-7 px-5">
-                      <p className="text-white/35 text-xs text-center leading-relaxed">
-                        当前页面运行在 iframe 中<br />浏览器权限策略阻止了字体访问
-                      </p>
-                      <p className="text-white/20 text-[10px] text-center">
-                        请在独立标签页中打开本工具，<br />或使用下方手动输入
-                      </p>
-                    </div>
-                  )}
-
-                  {localFontsStatus === "error" && (
-                    <div className="flex flex-col items-center gap-3 py-7 px-5">
-                      <p className="text-white/30 text-xs text-center">获取失败，请重试</p>
-                      <button
-                        onClick={fetchLocalFonts}
-                        className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors"
-                      >
-                        <RefreshCw size={11} />重试
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Font list on success */}
-                  {localFontsStatus === "success" && (
-                    <>
-                      <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] flex-shrink-0">
-                        <span className="text-white/25 text-[10px]">共 {localFonts.length} 个字体</span>
-                        <button
-                          onClick={fetchLocalFonts}
-                          className="flex items-center gap-1 text-white/30 hover:text-white/60 text-[10px] transition-colors"
-                        >
-                          <RefreshCw size={10} />刷新
-                        </button>
-                      </div>
-                      <div className="overflow-y-auto py-1" style={{ maxHeight: 220 }}>
-                        {filteredLocalFonts.map((name) => (
-                          <button
-                            key={name}
-                            className={`font-row w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors ${
-                              fontFamily === name ? "text-indigo-400" : "text-white/75"
-                            }`}
-                            style={{ fontFamily: `'${name}', sans-serif`, fontSize: 15 }}
-                            onClick={() => applyLocalFont(name)}
-                          >
-                            <span className="truncate">{name}</span>
-                            {fontFamily === name && <Check size={13} className="text-indigo-400 flex-shrink-0 ml-2" />}
-                          </button>
-                        ))}
-                        {filteredLocalFonts.length === 0 && (
-                          <div className="text-white/25 text-sm text-center py-6">没有找到字体</div>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* ── Common system fonts quick-pick ── */}
-                  {localFontsStatus !== "loading" && localFontsStatus !== "success" && (
-                    <div className="border-t border-white/[0.07] px-3 pt-3 pb-2">
-                      <p className="text-white/20 text-[10px] mb-2">常用系统字体</p>
-                      <div className="flex flex-wrap gap-1">
-                        {[
-                          "PingFang SC", "微软雅黑", "黑体", "宋体", "楷体",
-                          "Helvetica Neue", "Arial", "Georgia", "Times New Roman", "Courier New",
-                        ].map((name) => (
-                          <button
-                            key={name}
-                            className="px-2 py-0.5 rounded text-[10px] bg-white/[0.06] text-white/45 hover:bg-white/[0.12] hover:text-white/80 transition-colors"
-                            style={{ fontFamily: `'${name}', sans-serif` }}
-                            onClick={() => applyLocalFont(name)}
-                          >
-                            {name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Manual font name input (always visible as fallback) ── */}
-                  <div className="border-t border-white/[0.07] px-3 pt-3 pb-3">
-                    <p className="text-white/20 text-[10px] mb-2">手动输入字体名称</p>
-                    <div className="flex gap-1.5">
-                      <input
-                        className="flex-1 bg-white/[0.05] border border-white/[0.08] focus:border-indigo-500/50 text-white text-xs px-3 py-1.5 rounded-lg outline-none placeholder-white/20 transition-colors"
-                        placeholder="如：苹方、微软雅黑、Arial…"
-                        value={manualFontInput}
-                        onChange={(e) => setManualFontInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && manualFontInput.trim()) {
-                            applyLocalFont(manualFontInput.trim());
-                            setManualFontInput("");
-                          }
-                        }}
-                      />
-                      <button
-                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
-                        disabled={!manualFontInput.trim()}
-                        onClick={() => {
-                          if (manualFontInput.trim()) {
-                            applyLocalFont(manualFontInput.trim());
-                            setManualFontInput("");
-                          }
-                        }}
-                      >
-                        应用
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
+      <header className="flex flex-col md:flex-row md:items-center gap-2 px-4 py-2 bg-[#111114] border-b border-white/[0.07] flex-shrink-0 z-30">
+        {/* Row 1: Logo & Basic actions (Branding, Export, Undo/Redo) */}
+        <div className="flex items-center justify-between w-full md:w-auto flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <Type size={13} className="text-white" />
             </div>
-          )}
-        </div>
+            <span className="text-white font-semibold text-[13px] tracking-tight">Moonvy·Text</span>
+          </div>
 
-        {/* ── Font Size ── */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <input
-            type="range" min={12} max={200} value={fontSize}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setFontSize(v);
-              if (editorRef.current) editorRef.current.style.fontSize = `${v}px`;
-            }}
-            className="w-20 accent-indigo-500"
-            style={{ height: 2 }}
-          />
-          <input
-            type="number" min={12} max={200} value={fontSize}
-            onChange={(e) => {
-              const v = Math.min(200, Math.max(12, Number(e.target.value) || 12));
-              setFontSize(v);
-              if (editorRef.current) editorRef.current.style.fontSize = `${v}px`;
-            }}
-            className="w-14 bg-white/[0.05] text-white text-[12px] px-2 py-1 rounded-md outline-none text-center border border-white/[0.07] focus:border-indigo-500/50"
-          />
-        </div>
-
-        {/* ── Line height ── */}
-        <div className="flex items-center gap-1.5 flex-shrink-0" title="Line height">
-          <span className="text-white/25 text-[11px] font-mono select-none">↕</span>
-          <input
-            type="range" min={0.8} max={3} step={0.05} value={lineHeight}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setLineHeight(v);
-              if (editorRef.current) editorRef.current.style.lineHeight = String(v);
-            }}
-            className="w-14 accent-indigo-500"
-            style={{ height: 2 }}
-          />
-        </div>
-
-        <div className="w-px h-5 bg-white/[0.08] flex-shrink-0" />
-
-        {/* ── Bold / Italic ── */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button
-            className="p-1.5 hover:bg-white/[0.08] rounded-md text-white/50 hover:text-white transition-colors"
-            onClick={() => applyFormat("bold")} title="Bold (Ctrl+B)"
-          >
-            <Bold size={14} />
-          </button>
-          <button
-            className="p-1.5 hover:bg-white/[0.08] rounded-md text-white/50 hover:text-white transition-colors"
-            onClick={() => applyFormat("italic")} title="Italic (Ctrl+I)"
-          >
-            <Italic size={14} />
-          </button>
-        </div>
-
-        {/* ── Alignment ── */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          {([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) => (
+          <div className="flex items-center gap-1">
+            {/* Undo/Redo */}
             <button
-              key={align}
-              className={`p-1.5 rounded-md transition-colors ${
-                textAlign === align
-                  ? "bg-indigo-600/30 text-indigo-300"
-                  : "text-white/50 hover:text-white hover:bg-white/[0.08]"
+              className="p-1.5 hover:bg-white/[0.08] active:bg-white/[0.12] rounded-md text-white/50 hover:text-white transition-colors cursor-pointer"
+              onClick={handleUndo}
+              title="撤销 (Undo)"
+            >
+              <Undo size={14} />
+            </button>
+            <button
+              className="p-1.5 hover:bg-white/[0.08] active:bg-white/[0.12] rounded-md text-white/50 hover:text-white transition-colors cursor-pointer"
+              onClick={handleRedo}
+              title="重做 (Redo)"
+            >
+              <Redo size={14} />
+            </button>
+            <div className="w-px h-4 bg-white/[0.08] mx-1 md:hidden" />
+            {/* Mobile-only Export */}
+            <button
+              className="md:hidden flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors shadow-lg shadow-indigo-600/10 cursor-pointer"
+              onClick={exportAsPNG}
+              disabled={isExporting}
+              title="导出图片"
+            >
+              <Camera size={12} />
+              <span>{isExporting ? "..." : "导出"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Separator for desktop */}
+        <div className="hidden md:block w-px h-5 bg-white/[0.08] mr-1 flex-shrink-0" />
+
+        {/* Row 2 / Controls list: Wrapped on mobile, flex-nowrap on desktop */}
+        <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full py-1.5">
+          {/* Pill 1: Font Family & Size */}
+          <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl flex-shrink-0">
+            {/* ── Font Family ── */}
+            <div className="relative flex-shrink-0" ref={isMobile ? undefined : fontMenuRef}>
+              <button
+                className="flex items-center gap-2 bg-white/[0.05] hover:bg-white/[0.09] text-white px-3 py-1.5 rounded-lg text-sm transition-colors min-w-[148px] border border-white/[0.07] cursor-pointer"
+                onClick={() => setShowFontMenu((v) => !v)}
+              >
+                <span
+                  className="flex-1 text-left truncate text-[15px]"
+                  style={{ fontFamily: `'${fontFamily}', sans-serif` }}
+                >
+                  {fontFamily}
+                </span>
+                <ChevronDown size={12} className="text-white/30 flex-shrink-0" />
+              </button>
+
+              {!isMobile && showFontMenu && (
+                <div className="absolute top-full left-0 mt-1.5 w-[280px] bg-[#18181c] border border-white/[0.08] rounded-xl shadow-2xl shadow-black/60 z-50 flex flex-col overflow-hidden">
+                  {renderFontMenuContent()}
+                </div>
+              )}
+            </div>
+
+            {/* ── Font Size ── */}
+            <div className="flex items-center gap-1.5 flex-shrink-0 pr-1">
+              <input
+                type="range" min={12} max={200} value={fontSize}
+                onChange={(e) => changeFontSize(Number(e.target.value))}
+                className="w-16 md:w-20 accent-indigo-500"
+                style={{ height: 2 }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              />
+              <input
+                type="number" min={12} max={200} value={fontSize}
+                onChange={(e) => {
+                  const v = Math.min(200, Math.max(12, Number(e.target.value) || 12));
+                  changeFontSize(v);
+                }}
+                className="w-12 md:w-14 bg-white/[0.05] text-white text-[12px] px-1.5 py-1 rounded-md outline-none text-center border border-white/[0.07] focus:border-indigo-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Pill 2: Line Height, Styles, Alignment & Colors */}
+          <div className="flex items-center gap-2.5 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl flex-shrink-0">
+            {/* ── Line height ── */}
+            <div className="flex items-center gap-1.5 flex-shrink-0" title="Line height">
+              <span className="text-white/25 text-[11px] font-mono select-none">↕</span>
+              <input
+                type="range" min={0.8} max={3} step={0.05} value={lineHeight}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setLineHeight(v);
+                  if (editorRef.current) editorRef.current.style.lineHeight = String(v);
+                }}
+                className="w-12 md:w-14 accent-indigo-500"
+                style={{ height: 2 }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              />
+            </div>
+
+            <div className="w-px h-4 bg-white/[0.08]" />
+
+            {/* ── Bold / Italic ── */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <button
+                className="p-1.5 hover:bg-white/[0.08] rounded-md text-white/50 hover:text-white transition-colors cursor-pointer"
+                onClick={() => applyFormat("bold")} title="Bold (Ctrl+B)"
+              >
+                <Bold size={14} />
+              </button>
+              <button
+                className="p-1.5 hover:bg-white/[0.08] rounded-md text-white/50 hover:text-white transition-colors cursor-pointer"
+                onClick={() => applyFormat("italic")} title="Italic (Ctrl+I)"
+              >
+                <Italic size={14} />
+              </button>
+            </div>
+
+            <div className="w-px h-4 bg-white/[0.08]" />
+
+            {/* ── Alignment ── */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              {([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) => (
+                <button
+                  key={align}
+                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                    textAlign === align
+                      ? "bg-indigo-600/30 text-indigo-300"
+                      : "text-white/50 hover:text-white hover:bg-white/[0.08]"
+                  }`}
+                  onClick={() => applyAlign(align)}
+                  title={`Align ${align}`}
+                >
+                  <Icon size={14} />
+                </button>
+              ))}
+            </div>
+
+            <div className="w-px h-4 bg-white/[0.08]" />
+
+            {/* ── Colors ── */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Text color */}
+              <div className="relative">
+                <button
+                  id="text-color-anchor"
+                  className="flex flex-col items-center gap-0.5 p-1.5 hover:bg-white/[0.08] rounded-md cursor-pointer transition-colors"
+                  title="字体颜色"
+                  onClick={() => (textPickerRef.current as any)?.toggle()}
+                >
+                  <span className="text-white/60 text-sm font-bold leading-none" style={{ fontFamily: "serif" }}>A</span>
+                  <div className="w-3.5 h-[3px] rounded-full" style={{ backgroundColor: textColor }} />
+                </button>
+                <pretty-color-picker
+                  ref={textPickerRef as any}
+                  value={textColor}
+                  mode="popover"
+                  theme="dark"
+                  label="字体颜色"
+                  anchor="#text-color-anchor"
+                  header-action="close"
+                />
+              </div>
+
+              {/* Canvas background */}
+              <div className="relative">
+                <button
+                  id="bg-color-anchor"
+                  className="flex flex-col items-center gap-0.5 p-1.5 hover:bg-white/[0.08] rounded-md cursor-pointer transition-colors"
+                  title="画布背景色"
+                  onClick={() => (bgPickerRef.current as any)?.toggle()}
+                >
+                  <Palette size={13} className="text-white/50" />
+                  <div className="w-3.5 h-[3px] rounded-full border border-white/[0.15]" style={{ backgroundColor: bgColor }} />
+                </button>
+                <pretty-color-picker
+                  ref={bgPickerRef as any}
+                  value={bgColor}
+                  mode="popover"
+                  theme="dark"
+                  label="画布背景"
+                  anchor="#bg-color-anchor"
+                  header-action="close"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Pill 3: Insert actions (Image, Emoji, Icons) */}
+          <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl flex-shrink-0">
+            {/* Upload image / SVG */}
+            <button
+              className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.07] text-white/70 hover:text-white px-3 py-1.5 rounded-lg text-[12px] transition-colors cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              title="Insert image or animation&#10;Supports: GIF · APNG · WebP · SVG · Lottie JSON"
+            >
+              <ImagePlus size={14} />
+              <span>Image / GIF</span>
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*,.svg,.json" className="hidden" onChange={handleFileChange} />
+
+            {/* Emoji toggle */}
+            <button
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                showEmojiPanel
+                  ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                  : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
               }`}
-              onClick={() => applyAlign(align)}
-              title={`Align ${align}`}
+              onClick={() => setShowEmojiPanel((v) => !v)}
             >
-              <Icon size={14} />
+              <span className="text-base leading-none">😀</span>
+              <span>Emoji</span>
             </button>
-          ))}
-        </div>
 
-        <div className="w-px h-5 bg-white/[0.08] flex-shrink-0" />
-
-        {/* ── Colors ── */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Text color — pretty-color-picker */}
-          <div className="relative">
+            {/* Icons toggle */}
             <button
-              id="text-color-anchor"
-              className="flex flex-col items-center gap-0.5 p-1.5 hover:bg-white/[0.08] rounded-md cursor-pointer transition-colors"
-              title="字体颜色"
-              onClick={() => (textPickerRef.current as any)?.toggle()}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                showIconPanel
+                  ? "bg-violet-500/15 text-violet-300 border-violet-500/30"
+                  : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
+              }`}
+              onClick={() => setShowIconPanel((v) => !v)}
             >
-              <span className="text-white/60 text-sm font-bold leading-none" style={{ fontFamily: "serif" }}>A</span>
-              <div className="w-3.5 h-[3px] rounded-full" style={{ backgroundColor: textColor }} />
+              <Sparkles size={14} />
+              <span>Icons</span>
             </button>
-            <pretty-color-picker
-              ref={textPickerRef as any}
-              value={textColor}
-              mode="popover"
-              theme="dark"
-              label="字体颜色"
-              anchor="#text-color-anchor"
-              header-action="close"
-            />
           </div>
 
-          {/* Canvas background — pretty-color-picker web component */}
-          <div className="relative">
+          {/* Desktop-only Export */}
+          <div className="hidden md:flex items-center gap-1.5 flex-shrink-0 ml-auto">
+            <div className="w-px h-5 bg-white/[0.08] mr-1.5" />
             <button
-              id="bg-color-anchor"
-              className="flex flex-col items-center gap-0.5 p-1.5 hover:bg-white/[0.08] rounded-md cursor-pointer transition-colors"
-              title="画布背景色"
-              onClick={() => (bgPickerRef.current as any)?.toggle()}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-indigo-600/10 cursor-pointer"
+              onClick={exportAsPNG}
+              disabled={isExporting}
+              title="导出为静态高清 PNG 图片 (2x Retina 像素)"
             >
-              <Palette size={13} className="text-white/50" />
-              <div className="w-3.5 h-[3px] rounded-full border border-white/[0.15]" style={{ backgroundColor: bgColor }} />
+              <Camera size={13} />
+              <span>{isExporting ? "生成中..." : "导出图片"}</span>
             </button>
-            <pretty-color-picker
-              ref={bgPickerRef as any}
-              value={bgColor}
-              mode="popover"
-              theme="dark"
-              label="画布背景"
-              anchor="#bg-color-anchor"
-              header-action="close"
-            />
           </div>
-        </div>
-
-        <div className="flex-1 min-w-2" />
-
-        {/* ── Insert actions ── */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Upload image / SVG */}
-          <button
-            className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.07] text-white/70 hover:text-white px-3 py-1.5 rounded-lg text-[12px] transition-colors"
-            onClick={() => fileInputRef.current?.click()}
-            title="Insert image or animation&#10;Supports: GIF · APNG · WebP · SVG · Lottie JSON"
-          >
-            <ImagePlus size={14} />
-            <span>Image / GIF</span>
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*,.svg,.json" className="hidden" onChange={handleFileChange} />
-
-          {/* Emoji toggle */}
-          <button
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors ${
-              showEmojiPanel
-                ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
-            }`}
-            onClick={() => setShowEmojiPanel((v) => !v)}
-          >
-            <span className="text-base leading-none">😀</span>
-            <span>Emoji</span>
-          </button>
-
-          {/* Icons toggle */}
-          <button
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors ${
-              showIconPanel
-                ? "bg-violet-500/15 text-violet-300 border-violet-500/30"
-                : "bg-white/[0.05] border-white/[0.07] text-white/70 hover:text-white hover:bg-white/[0.09]"
-            }`}
-            onClick={() => setShowIconPanel((v) => !v)}
-          >
-            <Sparkles size={14} />
-            <span>Icons</span>
-          </button>
-        </div>
-
-        <div className="w-px h-5 bg-white/[0.08] flex-shrink-0" />
-
-        {/* ── Export actions ── */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.05] disabled:text-white/20 text-white px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors shadow-lg shadow-indigo-600/10 cursor-pointer"
-            onClick={exportAsPNG}
-            disabled={isExporting}
-            title="导出为静态高清 PNG 图片 (2x Retina 像素)"
-          >
-            <Camera size={13} />
-            <span>{isExporting ? "生成中..." : "导出图片"}</span>
-          </button>
         </div>
       </header>
 
       {/* ── Main Layout (Canvas + Sidebar) ─────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left: Editor & Shortcuts */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
           <div className="flex-1 overflow-auto" style={{ backgroundColor: bgColor }}>
@@ -1300,7 +1558,7 @@ export default function App() {
               ref={editorRef}
               contentEditable
               suppressContentEditableWarning
-              className="textmix-canvas min-h-full p-12 md:p-16"
+              className="textmix-canvas min-h-full p-6 sm:p-12 md:p-16"
               onKeyDown={handleKeyDown}
               onInput={saveContent}
               data-placeholder="Start typing here… mix in 🎨 emoji, 🖼️ images, and ✦ icons anywhere"
@@ -1317,7 +1575,7 @@ export default function App() {
           </div>
 
           {/* Shortcuts hint bar */}
-          <div className="flex items-center justify-center gap-4 px-4 py-2 bg-[#0a0a0d] border-t border-white/[0.05] flex-shrink-0 flex-wrap z-10">
+          <div className="hidden md:flex items-center justify-center gap-4 px-4 py-2 bg-[#0a0a0d] border-t border-white/[0.05] flex-shrink-0 flex-wrap z-10">
             {[
               ["⌘Z", "撤销"], ["⌘⇧Z", "重做"], ["⌘B", "加粗"],
               ["⌘I", "斜体"], ["⌘C", "复制"], ["⌘V", "粘贴"],
@@ -1331,152 +1589,73 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Sidebar */}
-        {(showEmojiPanel || showIconPanel) && (
+        {/* Right: Sidebar (Desktop only) */}
+        {!isMobile && (showEmojiPanel || showIconPanel) && (
           <div className="w-[320px] border-l border-white/[0.07] bg-[#111114] flex flex-col flex-shrink-0 divide-y divide-white/[0.06] overflow-hidden">
-            {/* ── Emoji Panel ─────────────────────────────────────────────────── */}
-            {showEmojiPanel && (
-              <div className="flex flex-col flex-1 min-h-0">
-                {/* Header: source toggle + close */}
-                <div className="flex flex-col flex-shrink-0 border-b border-white/[0.06] gap-2">
-                  {/* Line 1: Source tabs + Close button */}
-                  <div className="flex items-center justify-between px-3 pt-2.5">
-                    <div className="flex rounded-lg overflow-hidden border border-white/[0.08] flex-shrink-0">
-                      {(["fluent", "system"] as const).map((src) => (
-                        <button
-                          key={src}
-                          className={`px-3 py-1 text-[11px] font-medium transition-colors ${
-                            emojiSource === src
-                              ? "bg-white/[0.12] text-white"
-                              : "text-white/35 hover:text-white/60"
-                          }`}
-                          onClick={() => setEmojiSource(src)}
-                        >
-                          {src === "system" ? "系统 Emoji" : "✦ Fluent"}
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => setShowEmojiPanel(false)} className="text-white/25 hover:text-white/60 flex-shrink-0 transition-colors cursor-pointer p-1">
-                      <X size={15} />
-                    </button>
-                  </div>
+            {showEmojiPanel && renderEmojiPanelContent()}
+            {showIconPanel && renderIconPanelContent()}
+          </div>
+        )}
 
-                  {/* Line 2: Category tabs (scrollable) - occupies its own line */}
-                  <div className="flex gap-1 px-3 pb-2.5 overflow-x-auto min-w-0 scrollbar-none">
-                    {Object.keys(emojiSource === "system" ? EMOJI_CATS : FLUENT_EMOJI_CATS).map((cat) => {
-                      const active = emojiSource === "system" ? cat === emojiCat : cat === fluentCat;
-                      return (
-                        <button
-                          key={cat}
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] whitespace-nowrap flex-shrink-0 transition-colors ${
-                            active
-                              ? emojiSource === "system"
-                                ? "bg-amber-500/20 text-amber-300"
-                                : "bg-indigo-500/20 text-indigo-300"
-                              : "bg-white/[0.06] text-white/35 hover:text-white/60"
-                          }`}
-                          onClick={() => emojiSource === "system" ? setEmojiCat(cat) : setFluentCat(cat)}
-                        >
-                          {cat}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* System emoji grid */}
-                {emojiSource === "system" && (
-                  <div className="px-3 py-2.5 grid gap-0.5 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(40px, 1fr))" }}>
-                    {EMOJI_CATS[emojiCat].map((emoji) => (
-                      <button
-                        key={emoji}
-                        className="emoji-btn text-2xl p-1.5 rounded-lg transition-colors text-center leading-none cursor-pointer"
-                        onClick={() => insertEmoji(emoji)}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Fluent emoji image grid (animated PNG) */}
-                {emojiSource === "fluent" && (
-                  <div className="px-3 py-2.5 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))" }}>
-                    {(FLUENT_EMOJI_CATS[fluentCat] ?? []).map(([char, category, name]) => (
-                      <button
-                        key={`${category}/${name}`}
-                        className="emoji-btn flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition-colors group cursor-pointer"
-                        onClick={() => insertFluentEmoji(category, name, char)}
-                        title={name}
-                      >
-                        <img
-                          src={fluentUrl(category, name)}
-                          alt={char}
-                          loading="lazy"
-                          className="w-8 h-8 object-contain group-hover:scale-110 transition-transform"
-                          onError={(e) => {
-                            const parent = (e.target as HTMLImageElement).parentElement;
-                            if (parent) {
-                              parent.innerHTML = `<span class="text-2xl leading-none">${char}</span>`;
-                              parent.onclick = () => insertEmoji(char);
-                            }
-                          }}
-                        />
-                        <span className="text-white/20 text-[8px] truncate w-full text-center leading-tight group-hover:text-white/40 transition-colors">{char}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+        {/* Mobile Font Menu Drawer */}
+        {isMobile && showFontMenu && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowFontMenu(false)} />
+            <div className="relative w-full max-h-[70vh] bg-[#18181c] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+              <div className="flex justify-center py-2 flex-shrink-0">
+                <div className="w-12 h-1.5 rounded-full bg-white/20" />
               </div>
-            )}
-
-            {/* ── Icon Panel ──────────────────────────────────────────────────── */}
-            {showIconPanel && (
-              <div className="flex flex-col flex-1 min-h-0">
-                <div className="flex items-center gap-3 px-4 pt-3 pb-2 flex-shrink-0">
-                  <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.07] rounded-lg px-3 flex-1">
-                    <Search size={12} className="text-white/25 flex-shrink-0" />
-                    <input
-                      autoFocus
-                      className="flex-1 bg-transparent text-white text-sm py-2 outline-none placeholder-white/20"
-                      placeholder="Search icons…"
-                      value={iconSearch}
-                      onChange={(e) => setIconSearch(e.target.value)}
-                    />
-                    {iconSearch && (
-                      <button onClick={() => setIconSearch("")} className="text-white/20 hover:text-white/50 transition-colors">
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <button onClick={() => setShowIconPanel(false)} className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 cursor-pointer">
-                    <X size={15} />
-                  </button>
-                </div>
-
-                <div className="px-4 pb-4 grid gap-1 overflow-y-auto flex-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))" }}>
-                  {filteredIcons.map((name) => {
-                    const Icon = ICON_MAP[name];
-                    return (
-                      <button
-                        key={name}
-                        className="icon-btn flex flex-col items-center gap-1 p-2.5 rounded-xl transition-colors group cursor-pointer"
-                        onClick={() => insertIcon(name)}
-                        title={name}
-                      >
-                        <Icon size={22} className="text-white/60 group-hover:text-white transition-colors" />
-                        <span className="text-white/25 group-hover:text-white/50 text-[9px] truncate w-full text-center leading-tight transition-colors">
-                          {name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {filteredIcons.length === 0 && (
-                    <p className="text-white/25 text-sm col-span-full text-center py-6">No icons found</p>
-                  )}
-                </div>
+              <div className="flex items-center justify-between px-4 pb-2 border-b border-white/[0.07] flex-shrink-0">
+                <span className="text-white font-semibold text-sm">选择字体</span>
+                <button onClick={() => setShowFontMenu(false)} className="text-white/40 hover:text-white/70 p-1 cursor-pointer">
+                  <X size={16} />
+                </button>
               </div>
-            )}
+              <div className="flex-1 overflow-hidden min-h-0">
+                {renderFontMenuContent()}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Mobile Emoji Drawer */}
+        {isMobile && showEmojiPanel && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowEmojiPanel(false)} />
+            <div className="relative w-full max-h-[70vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+              <div className="flex justify-center py-2 flex-shrink-0">
+                <div className="w-12 h-1.5 rounded-full bg-white/20" />
+              </div>
+              <div className="flex items-center justify-between px-4 pb-2 border-b border-white/[0.07] flex-shrink-0">
+                <span className="text-white font-semibold text-sm">插入表情</span>
+                <button onClick={() => setShowEmojiPanel(false)} className="text-white/40 hover:text-white/70 p-1 cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+                {renderEmojiPanelContent()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Icons Drawer */}
+        {isMobile && showIconPanel && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowIconPanel(false)} />
+            <div className="relative w-full max-h-[70vh] bg-[#111114] border-t border-white/[0.08] rounded-t-2xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up">
+              <div className="flex justify-center py-2 flex-shrink-0">
+                <div className="w-12 h-1.5 rounded-full bg-white/20" />
+              </div>
+              <div className="flex items-center justify-between px-4 pb-2 border-b border-white/[0.07] flex-shrink-0">
+                <span className="text-white font-semibold text-sm">插入图标</span>
+                <button onClick={() => setShowIconPanel(false)} className="text-white/40 hover:text-white/70 p-1 cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+                {renderIconPanelContent()}
+              </div>
+            </div>
           </div>
         )}
       </div>
